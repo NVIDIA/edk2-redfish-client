@@ -235,21 +235,21 @@ DumpConfigLangMapList (
   }
 
   if (!IS_EMPTY_STRING (Msg)) {
-    DEBUG ((DEBUG_ERROR, "%s\n", Msg));
+    DEBUG ((CONFIG_LANG_MAP_TRACE, "%s\n", Msg));
   }
 
-  if (IsListEmpty (&ConfigLangMapList->ListHeader)) {
-    DEBUG ((DEBUG_MANAGEABILITY, "ConfigLangMap list is empty\n"));
+  if (IsListEmpty (&ConfigLangMapList->Listheader)) {
+    DEBUG ((CONFIG_LANG_MAP_TRACE, "ConfigLangMap list is empty\n"));
     return EFI_NOT_FOUND;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "Count: %d Total Size: %d\n", ConfigLangMapList->Count, ConfigLangMapList->TotalSize));
+  DEBUG ((CONFIG_LANG_MAP_TRACE, "Count: %d Total Size: %d\n", ConfigLangMapList->Count, ConfigLangMapList->TotalSize));
   Record = NULL;
   List   = GetFirstNode (&ConfigLangMapList->ListHeader);
   while (!IsNull (&ConfigLangMapList->ListHeader, List)) {
     Record = REDFISH_CONFIG_LANG_MAP_RECORD_FROM_LIST (List);
 
-    DEBUG ((DEBUG_MANAGEABILITY, "ConfigLang: %s Uri: %s Size: %d\n", Record->ConfigLang, Record->Uri, Record->Size));
+    DEBUG ((CONFIG_LANG_MAP_TRACE, "ConfigLang: %s Uri: %s Size: %d\n", Record->ConfigLang, Record->Uri, Record->Size));
 
     List = GetNextNode (&ConfigLangMapList->ListHeader, List);
   }
@@ -549,7 +549,7 @@ RedfishConfigLangMapGet (
     return EFI_INVALID_PARAMETER;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: type: 0x%x %s\n", __func__, QueryStringType, QueryString));
+  DEBUG ((CONFIG_LANG_MAP_TRACE, "%a: type: 0x%x %s\n", __func__, QueryStringType, QueryString));
 
   Private = REDFISH_CONFIG_LANG_MAP_PRIVATE_FROM_THIS (This);
 
@@ -600,7 +600,7 @@ RedfishConfigLangMapSet (
     return EFI_INVALID_PARAMETER;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: %s -> %s\n", __func__, ConfigLang, (Uri == NULL ? L"NULL" : Uri)));
+  DEBUG ((CONFIG_LANG_MAP_TRACE, "%a: %s -> %s\n", __func__, ConfigLang, (Uri == NULL ? L"NULL" : Uri)));
 
   Private = REDFISH_CONFIG_LANG_MAP_PRIVATE_FROM_THIS (This);
 
@@ -658,7 +658,7 @@ RedfishConfigLangMapFlush (
     DEBUG ((DEBUG_ERROR, "%a: save ConfigLangMap list to variable: %s failed: %r\n", __func__, Private->VariableName, Status));
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: save Config Language map to variable: %s\n", __func__, Private->VariableName));
+  DEBUG ((CONFIG_LANG_MAP_TRACE, "%a: save Config Language map to variable: %s\n", __func__, Private->VariableName));
 
   return Status;
 }
@@ -672,7 +672,7 @@ RedfishConfigLangMapFlush (
 **/
 VOID
 EFIAPI
-RedfishConfigLangMapOnAfterProvisioning  (
+RedfishConfigLangMapOnAfterProvisioning (
   IN  EFI_EVENT  Event,
   OUT VOID       *Context
   )
@@ -791,10 +791,10 @@ RedfishConfigLangMapDriverEntryPoint (
   //
   // Read existing record from variable.
   //
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: Initial ConfigLangMap List from variable: %s\n", __func__, mRedfishConfigLangMapPrivate->VariableName));
+  DEBUG ((CONFIG_LANG_MAP_TRACE, "%a, Initial ConfigLangMap List from variable: %s\n", __func__, mRedfishConfigLangMapPrivate->VariableName));
   Status = InitialConfigLangMapList (&mRedfishConfigLangMapPrivate->ConfigLangList, mRedfishConfigLangMapPrivate->VariableName);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_MANAGEABILITY, "%a: Initial ConfigLangMap List: %r\n", __func__, Status));
+    DEBUG ((CONFIG_LANG_MAP_TRACE, "%a, Initial ConfigLangMap List: %r\n", __func__, Status));
   }
 
   //

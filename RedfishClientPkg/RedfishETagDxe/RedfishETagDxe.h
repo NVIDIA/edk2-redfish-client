@@ -65,6 +65,7 @@ typedef struct {
   EDKII_REDFISH_ETAG_PROTOCOL    Protocol;
   EFI_STRING                     VariableName;
   EFI_EVENT                      Event;
+  EFI_EVENT                      ProvisionEvent;
 } REDFISH_ETAG_PRIVATE_DATA;
 
 #define REDFISH_ETAG_PRIVATE_FROM_THIS(a)  BASE_CR (a, REDFISH_ETAG_PRIVATE_DATA, Protocol)
