@@ -2019,12 +2019,14 @@ CreatePayloadToPatchResource (
     goto EXIT_FREE_JSON_VALUE;
   }
 
-  //
-  // Find ETag
-  //
-  Status = GetEtagAndLocation (&PostResponse, Etag, NULL);
-  if (EFI_ERROR (Status)) {
-    Status = EFI_DEVICE_ERROR;
+  if (Etag != NULL) {
+    //
+    // Find ETag
+    //
+    Status = GetEtagAndLocation (&PostResponse, Etag, NULL);
+    if (EFI_ERROR (Status)) {
+      Status = EFI_DEVICE_ERROR;
+    }
   }
 
   RedfishFreeResponse (
@@ -2291,6 +2293,8 @@ RedfishGetConfigLanguage (
                                          Uri,
                                          &ConfigLang
                                          );
+
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a: done: %s\n", __func__, Uri));
 
   return ConfigLang;
 }
