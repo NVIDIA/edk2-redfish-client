@@ -3654,7 +3654,7 @@ CompareRedfishBooleanArrayValues (
   "SettingUri".
 
   @param[in]  Payload         Payload that may contain "@Redfish.Settings"
-  @param[out] SettingPayload  Payload keeps pending settings.
+  @param[out] SettingPayload  Payload keeps pending settings. This is optional.
   @param[out] SettingUri      URI to pending settings.
 
   @retval     EFI_SUCCESS     Pending settings is found and returned.
@@ -3665,7 +3665,7 @@ EFI_STATUS
 GetPendingSettings (
   IN  REDFISH_SERVICE   RedfishService,
   IN  REDFISH_PAYLOAD   Payload,
-  OUT REDFISH_RESPONSE  *SettingResponse,
+  OUT REDFISH_RESPONSE  *SettingResponse OPTIONAL,
   OUT EFI_STRING        *SettingUri
   )
 {
@@ -3674,7 +3674,7 @@ GetPendingSettings (
   UINTN             Index;
   EFI_STATUS        Status;
 
-  if ((RedfishService == NULL) || (Payload == NULL) || (SettingResponse == NULL) || (SettingUri == NULL)) {
+  if ((RedfishService == NULL) || (Payload == NULL) || (SettingUri == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -3701,10 +3701,12 @@ GetPendingSettings (
       return EFI_NOT_FOUND;
     }
 
-    Status = GetResourceByUri (RedfishService, *SettingUri, SettingResponse);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: @Redfish.Settings exists, get resource from: %s failed: %r\n", __func__, *SettingUri, Status));
-      return Status;
+    if (SettingResponse != NULL) {
+      Status = GetResourceByUri (RedfishService, *SettingUri, SettingResponse);
+      if (EFI_ERROR (Status)) {
+        DEBUG ((DEBUG_ERROR, "%a: @Redfish.Settings exists, get resource from: %s failed: %r\n", __func__, *SettingUri, Status));
+        return Status;
+      }
     }
 
     return EFI_SUCCESS;
@@ -3739,6 +3741,7 @@ CompareRedfishPropertyVagueValues (
   RedfishCS_EmptyProp_KeyValue  *ThisRedfishVagueKeyValuePtr;
 
   if (RedfishVagueKeyValueNumber != ConfigVagueKeyValueNumber) {
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a: size is different: %d vs %d\n", __func__, RedfishVagueKeyValueNumber, ConfigVagueKeyValueNumber));
     return FALSE;
   }
 
@@ -3766,6 +3769,7 @@ CompareRedfishPropertyVagueValues (
         // Check the type of value.
         //
         if (ThisConfigVagueKeyValuePtr->Value->DataType != ThisRedfishVagueKeyValuePtr->Value->DataType) {
+          DEBUG ((REDFISH_DEBUG_TRACE, "%a: %a data type is different\n", __func__, ThisConfigVagueKeyValuePtr->KeyNamePtr));
           return FALSE;
         }
 

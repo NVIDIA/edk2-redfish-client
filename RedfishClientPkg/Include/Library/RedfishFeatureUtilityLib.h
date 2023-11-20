@@ -100,7 +100,7 @@ CopyConfiglanguageList (
 
 /**
 
-  Get number of node from the string. Node is seperated by '/'.
+  Get number of node from the string. Node is separated by '/'.
 
   @param[in]  NodeString             The node string to parse.
 
