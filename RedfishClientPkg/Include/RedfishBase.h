@@ -12,7 +12,13 @@
 #define EFI_REDFISH_BASE_H_
 
 #define IS_EMPTY_STRING(a)  ((a) == NULL || (a)[0] == '\0')
-#define REDFISH_DEBUG_TRACE  DEBUG_MANAGEABILITY
+
+//
+// Debug trace definitions
+//
+#define REDFISH_DEBUG_TRACE    DEBUG_MANAGEABILITY
+#define CONFIG_LANG_MAP_TRACE  DEBUG_MANAGEABILITY
+#define ETAG_DEBUG_TRACE       DEBUG_MANAGEABILITY
 
 ///
 /// This GUID is used for an EFI Variable that stores the Redfish data.

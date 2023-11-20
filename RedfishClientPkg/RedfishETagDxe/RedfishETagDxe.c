@@ -222,21 +222,21 @@ DumpETagList (
   }
 
   if (!IS_EMPTY_STRING (Msg)) {
-    DEBUG ((DEBUG_ERROR, "%s\n", Msg));
+    DEBUG ((ETAG_DEBUG_TRACE, "%s\n", Msg));
   }
 
   if (IsListEmpty (&ETagList->ListHeader)) {
-    DEBUG ((DEBUG_MANAGEABILITY, "ETag list is empty\n"));
+    DEBUG ((ETAG_DEBUG_TRACE, "ETag list is empty\n"));
     return EFI_NOT_FOUND;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "Count: %d Total Size: %d\n", ETagList->Count, ETagList->TotalSize));
+  DEBUG ((ETAG_DEBUG_TRACE, "Count: %d Total Size: %d\n", ETagList->Count, ETagList->TotalSize));
   Record = NULL;
   List   = GetFirstNode (&ETagList->ListHeader);
   while (!IsNull (&ETagList->ListHeader, List)) {
     Record = REDFISH_ETAG_RECORD_FROM_LIST (List);
 
-    DEBUG ((DEBUG_MANAGEABILITY, "ETag: %a Uri: %a Size: %d\n", Record->ETag, Record->Uri, Record->Size));
+    DEBUG ((ETAG_DEBUG_TRACE, "ETag: %a Uri: %a Size: %d\n", Record->ETag, Record->Uri, Record->Size));
 
     List = GetNextNode (&ETagList->ListHeader, List);
   }
@@ -532,7 +532,7 @@ RedfishETagGet (
     return EFI_INVALID_PARAMETER;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: %a\n", __func__, Uri));
+  DEBUG ((ETAG_DEBUG_TRACE, "%a: %a\n", __func__, Uri));
 
   Private = REDFISH_ETAG_PRIVATE_FROM_THIS (This);
 
@@ -576,7 +576,7 @@ RedfishETagSet (
     return EFI_INVALID_PARAMETER;
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: %a -> %a\n", __func__, Uri, (ETag == NULL ? "NULL" : ETag)));
+  DEBUG ((ETAG_DEBUG_TRACE, "%a: %a -> %a\n", __func__, Uri, (ETag == NULL ? "NULL" : ETag)));
 
   Private = REDFISH_ETAG_PRIVATE_FROM_THIS (This);
 
@@ -628,7 +628,7 @@ RedfishETagFlush (
     DEBUG ((DEBUG_ERROR, "%a: save ETag list to variable: %s failed: %r\n", __func__, Private->VariableName, Status));
   }
 
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: save ETag list to variable: %s\n", __func__, Private->VariableName));
+  DEBUG ((ETAG_DEBUG_TRACE, "%a: save ETag list to variable: %s\n", __func__, Private->VariableName));
 
   return Status;
 }
@@ -689,6 +689,10 @@ RedfishETagDriverUnload (
 
     if (mRedfishETagPrivate->Event != NULL) {
       gBS->CloseEvent (mRedfishETagPrivate->Event);
+    }
+
+    if (mRedfishETagPrivate->ProvisionEvent != NULL) {
+      gBS->CloseEvent (mRedfishETagPrivate->ProvisionEvent);
     }
 
     FreePool (mRedfishETagPrivate);
@@ -757,10 +761,10 @@ RedfishETagDriverEntryPoint (
   //
   // Read existing record from variable.
   //
-  DEBUG ((DEBUG_MANAGEABILITY, "%a: Initial ETag List from variable: %s\n", __func__, mRedfishETagPrivate->VariableName));
+  DEBUG ((ETAG_DEBUG_TRACE, "%a: Initial ETag List from variable: %s\n", __func__, mRedfishETagPrivate->VariableName));
   Status = InitialETagList (&mRedfishETagPrivate->ETagList, mRedfishETagPrivate->VariableName);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_MANAGEABILITY, "%a: Initial ETag List: %r\n", __func__, Status));
+    DEBUG ((ETAG_DEBUG_TRACE, "%a: Initial ETag List: %r\n", __func__, Status));
   }
 
   //
@@ -769,7 +773,7 @@ RedfishETagDriverEntryPoint (
   Status = CreateAfterProvisioningEvent (
              RedfishETagOnRedfishAfterProvisioning,
              NULL,
-             &mRedfishETagPrivate->Event
+             &mRedfishETagPrivate->ProvisionEvent
              );
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: failed to register after-provisioning event: %r\n", __func__, Status));
