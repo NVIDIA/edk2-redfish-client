@@ -61,6 +61,7 @@
 
   Copyright (c) 2019, Intel Corporation. All rights reserved.<BR>
   (C) Copyright 2021 Hewlett Packard Enterprise Development LP<BR>
+  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -180,6 +181,23 @@ RedfishCleanupPayload (
 EDKII_JSON_VALUE
 EFIAPI
 RedfishJsonInPayload (
+  IN REDFISH_PAYLOAD  Payload
+  );
+
+/**
+  This function returns the Redfish service of a REDFISH_PAYLOAD.
+
+  Caller doesn't need to free the returned JSON value because it will be released
+  in corresponding RedfishCleanupService() function.
+
+  @param[in]    Payload     A REDFISH_PAYLOAD instance.
+
+  @return     Redfish service of the payload.
+
+**/
+REDFISH_SERVICE
+EFIAPI
+RedfishServiceInPayload (
   IN REDFISH_PAYLOAD  Payload
   );
 
