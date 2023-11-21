@@ -27,6 +27,7 @@
   BootOptionV1_0_4Lib|RedfishClientPkg/ConverterLib/edk2library/BootOption/v1_0_4/Lib.inf
   SecureBootV1_1_0Lib|RedfishClientPkg/ConverterLib/edk2library/SecureBoot/v1_1_0/Lib.inf
   SecureBootDatabaseCollectionLib|RedfishClientPkg/ConverterLib/edk2library/SecureBootDatabaseCollection/Lib.inf
+  SecureBootDatabaseV1_0_1Lib|RedfishClientPkg/ConverterLib/edk2library/SecureBootDatabase/v1_0_1/Lib.inf
   #
   # Above modules should be pulled in by build tool.
   #
