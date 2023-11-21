@@ -672,4 +672,47 @@ RedfishBuildRedpathUseId (
   OUT CHAR8  **Redpath
   );
 
+/**
+  Use HTTP PUT to create new Redfish resource in the Resource Collection.
+
+  This function uses the RedfishService to put a Redfish resource addressed by
+  Uri (only the relative path is required). Changes to one or more properties within
+  the target resource are represented in the input Content, properties not specified
+  in Content won't be changed by this request. The corresponding redfish response will
+  returned, including HTTP StatusCode, Headers and Payload which record any HTTP response
+  messages.
+
+  Callers are responsible for freeing the HTTP StatusCode, Headers and Payload returned in
+  redfish response data.
+
+  @param[in]    RedfishService        The Service to access the Redfish resources.
+  @param[in]    Uri                   Relative path to address the resource.
+  @param[in]    Content               JSON represented properties to be update.
+  @param[in]    ContentSize           Size of the Content to be send to Redfish service
+  @param[in]    ContentType           Type of the Content to be send to Redfish service
+  @param[out]   RedResponse           Pointer to the Redfish response data.
+
+  @retval EFI_SUCCESS             The operation is successful, indicates the HTTP StatusCode is not
+                                  NULL and the value is 2XX. The Redfish resource will be returned
+                                  in Payload within RedResponse if server send it back in the HTTP
+                                  response message body.
+  @retval EFI_INVALID_PARAMETER   RedfishService, Uri, Content, or RedResponse is NULL.
+  @retval EFI_DEVICE_ERROR        An unexpected system or network error occurred. Callers can get
+                                  more error info from returned HTTP StatusCode, Headers and Payload
+                                  within RedResponse:
+                                  1. If the returned StatusCode is NULL, indicates any error happen.
+                                  2. If the returned StatusCode is not NULL and the value is not 2XX,
+                                     indicates any error happen.
+**/
+EFI_STATUS
+EFIAPI
+RedfishPutToUri (
+  IN     REDFISH_SERVICE   RedfishService,
+  IN     CONST CHAR8       *Uri,
+  IN     CONST CHAR8       *Content,
+  IN     UINTN             ContentSize OPTIONAL,
+  IN     CONST CHAR8       *ContentType OPTIONAL,
+  OUT    REDFISH_RESPONSE  *RedResponse
+  );
+
 #endif
