@@ -67,7 +67,7 @@ RedfishResourceProvisioningResource (
 
   Status = RedfishProvisioningResourceCommon (Private, !PostMode);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to provision resource to: %s: %r\n", __FUNCTION__, Uri, Status));
+    DEBUG ((DEBUG_ERROR, "%a: failed to provision resource to: %s: %r\n", __func__, Uri, Status));
   } else {
     //
     // Get latest ETag on URI and keep it in variable.
@@ -163,7 +163,7 @@ RedfishResourceConsumeResource (
 
   Status = RedfishConsumeResourceCommon (Private, Private->Json, Etag);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to consume resource from: %s: %r\n", __FUNCTION__, Private->Uri, Status));
+    DEBUG ((DEBUG_ERROR, "%a: failed to consume resource from: %s: %r\n", __func__, Private->Uri, Status));
   }
 
   //
@@ -274,7 +274,7 @@ RedfishResourceUpdate (
 
   Status = RedfishUpdateResourceCommon (Private, Private->Json);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to update resource to: %s: %r\n", __FUNCTION__, Uri, Status));
+    DEBUG ((DEBUG_ERROR, "%a: failed to update resource to: %s: %r\n", __func__, Uri, Status));
   } else {
     //
     // Get latest ETag on URI and keep it in variable.
@@ -349,7 +349,7 @@ RedfishResourceCheck (
   Etag   = NULL;
   Status = GetEtagAndLocation (&Response, &Etag, NULL);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to get ETag from HTTP header\n", __FUNCTION__));
+    DEBUG ((DEBUG_ERROR, "%a: failed to get ETag from HTTP header\n", __func__));
   }
 
   Status = RedfishCheckResourceCommon (Private, Private->Json, Etag);

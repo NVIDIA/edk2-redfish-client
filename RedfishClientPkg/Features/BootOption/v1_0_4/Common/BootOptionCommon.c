@@ -459,7 +459,7 @@ RedfishProvisioningResourceCommon (
   //
   Status = GetEtagAndLocation (&Response, NULL, &NewResourceLocation);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __FUNCTION__, Status));
+    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __func__, Status));
     goto RELEASE_RESOURCE;
   }
 

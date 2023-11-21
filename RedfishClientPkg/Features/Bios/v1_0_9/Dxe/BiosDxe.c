@@ -152,7 +152,7 @@ RedfishResourceConsumeResource (
 
     Status = GetResourceByUri (Private->RedfishService, RedfishSettingsUri, &RedfishSettingsResponse);
     if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a, @Redfish.Settings exists, get resource from: %s failed\n", __FUNCTION__, RedfishSettingsUri));
+      DEBUG ((DEBUG_ERROR, "%a, @Redfish.Settings exists, get resource from: %s failed\n", __func__, RedfishSettingsUri));
     } else {
       Uri              = RedfishSettingsUri;
       ExpectedResponse = &RedfishSettingsResponse;

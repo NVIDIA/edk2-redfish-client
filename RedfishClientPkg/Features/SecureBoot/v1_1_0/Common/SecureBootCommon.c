@@ -314,7 +314,7 @@ ProvisioningSecureBootResource (
   //
   Status = GetEtagAndLocation (&Response, NULL, &NewResourceLocation);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __FUNCTION__, Status));
+    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __func__, Status));
     goto RELEASE_RESOURCE;
   }
 
@@ -533,7 +533,7 @@ RedfishCheckResourceCommon (
     //
     // No change
     //
-    DEBUG ((REDFISH_DEBUG_TRACE, "%a: ETAG: %s has no change, ignore check action\n", __FUNCTION__, Private->Uri));
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a: ETAG: %s has no change, ignore check action\n", __func__, Private->Uri));
     return EFI_SUCCESS;
   }
 
@@ -824,7 +824,7 @@ HandleResource (
       DEBUG ((DEBUG_ERROR, "%a: failed to provision with GET mode: %r\n", __func__, Status));
     }
 
-    DEBUG ((REDFISH_DEBUG_TRACE, "%a: process resource for: %s finished\n", __FUNCTION__, Uri));
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a: process resource for: %s finished\n", __func__, Uri));
 
     return Status;
   }
@@ -847,7 +847,7 @@ HandleResource (
     DEBUG ((DEBUG_ERROR, "%a: failed to update resource for: %s: %r\n", __func__, Uri, Status));
   }
 
-  DEBUG ((REDFISH_DEBUG_TRACE, "%a: process resource for: %s finished\n", __FUNCTION__, Uri));
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a: process resource for: %s finished\n", __func__, Uri));
 
   return Status;
 }

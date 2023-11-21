@@ -116,7 +116,7 @@ RedfishGetVersion (
              TRUE
              );
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a, RedfishHttpGetResource to %s failed: %r\n", __FUNCTION__, REDFISH_ROOT_URI, Status));
+    DEBUG ((DEBUG_ERROR, "%a, RedfishHttpGetResource to %s failed: %r\n", __func__, REDFISH_ROOT_URI, Status));
     if (Response.Payload != NULL) {
       RedfishDumpPayload (Response.Payload);
     }
