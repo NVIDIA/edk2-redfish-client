@@ -49,3 +49,4 @@
   RedfishSystemTopologyLib|RedfishClientPkg/Library/RedfishSystemTopologyLibNull/RedfishSystemTopologyLibNull.inf
   SecureBootVariableLib|SecurityPkg/Library/SecureBootVariableLib/SecureBootVariableLib.inf
   PlatformPKProtectionLib|SecurityPkg/Library/PlatformPKProtectionLibVarPolicy/PlatformPKProtectionLibVarPolicy.inf
+  RedfishJsonBlobLib|RedfishClientPkg/Library/RedfishJsonBlobLib/RedfishJsonBlobLib.inf
