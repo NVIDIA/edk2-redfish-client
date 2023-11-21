@@ -18,6 +18,7 @@
   RedfishClientPkg/RedfishETagDxe/RedfishETagDxe.inf
   RedfishClientPkg/RedfishConfigLangMapDxe/RedfishConfigLangMapDxe.inf
   RedfishClientPkg/RedfishSecureBootKeysDxe/RedfishSecureBootKeysDxe.inf
+  RedfishClientPkg/RedfishTaskServiceDxe/RedfishTaskServiceDxe.inf
   RedfishClientPkg/HiiToRedfishMemoryDxe/HiiToRedfishMemoryDxe.inf
   RedfishClientPkg/HiiToRedfishBootDxe/HiiToRedfishBootDxe.inf
   RedfishClientPkg/HiiToRedfishBiosDxe/HiiToRedfishBiosDxe.inf
