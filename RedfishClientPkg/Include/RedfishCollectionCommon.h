@@ -27,6 +27,7 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/EdkIIRedfishResourceConfigLib.h>
 #include <Library/RedfishVersionLib.h>
+#include <Library/RedfishProtocolFeaturesLib.h>
 
 //
 // Protocols
