@@ -22,6 +22,7 @@
   INF RedfishClientPkg/Features/ComputerSystem/v1_5_0/Dxe/ComputerSystemDxe.inf
   INF RedfishClientPkg/Features/ComputerSystemCollectionDxe/ComputerSystemCollectionDxe.inf
   INF RedfishClientPkg/Features/Bios/v1_0_9/Dxe/BiosDxe.inf
+  INF RedfishClientPkg/Features/SecureBootDatabaseCollectionDxe/SecureBootDatabaseCollectionDxe.inf
   INF RedfishClientPkg/HiiToRedfishMemoryDxe/HiiToRedfishMemoryDxe.inf
   INF RedfishClientPkg/HiiToRedfishBootDxe/HiiToRedfishBootDxe.inf
   INF RedfishClientPkg/HiiToRedfishBiosDxe/HiiToRedfishBiosDxe.inf
@@ -35,4 +36,5 @@
   INF RedfishClientPkg/Converter/ComputerSystem/v1_5_0/RedfishComputerSystem_V1_5_0_Dxe.inf
   INF RedfishClientPkg/Converter/ComputerSystemCollection/RedfishComputerSystemCollection_Dxe.inf
   INF RedfishClientPkg/Converter/Bios/v1_0_9/RedfishBios_V1_0_9_Dxe.inf
+  INF RedfishClientPkg/Converter/SecureBootDatabaseCollection/RedfishSecureBootDatabaseCollection_Dxe.inf
 !endif
