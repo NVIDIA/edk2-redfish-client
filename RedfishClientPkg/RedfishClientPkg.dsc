@@ -62,5 +62,6 @@
   RedfishClientPkg/PrivateLibrary/RedfishLib/RedfishLib.inf
   RedfishClientPkg/Library/RedfishAddendumLib/RedfishAddendumLib.inf
   RedfishClientPkg/Library/RedfishHttpCacheLib/RedfishHttpCacheLib.inf
+  RedfishClientPkg/Library/RedfishJsonBlobLib/RedfishJsonBlobLib.inf
 
   !include RedfishClientPkg/RedfishClient.dsc.inc
