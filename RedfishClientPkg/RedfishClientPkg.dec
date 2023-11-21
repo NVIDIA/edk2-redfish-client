@@ -28,6 +28,7 @@
   RedfishEventLib|Include/Library/RedfishEventLib.h
   RedfishVersionLib|Include/Library/RedfishVersionLib.h
   RedfishJsonBlobLib|Include/Library/RedfishJsonBlobLib.h
+  RedfishSecureBootKeysLib|Include/Library/RedfishSecureBootKeysLib.h
 
 [Protocols]
   ## Include/Protocol/EdkIIRedfishFeature.h
@@ -46,6 +47,8 @@
   gEdkiiRedfishOverrideProtocolGuid         = { 0xb55bef20, 0xf7c8, 0x4ae9, { 0xa7, 0xca, 0x8b, 0xba, 0x9f, 0x7b, 0xbf, 0x9c } }
   ## Include/Protocol/EdkIIRedfishResourceConfig2Protocol.h
   gEdkIIRedfishResourceConfig2ProtocolGuid  = { 0xe9bef87f, 0xbff4, 0x4872, { 0xa9, 0xa4, 0x16, 0x59, 0xbe, 0xd9, 0x1c, 0xf4 } }
+  ## Include/Protocol/EdkIIRedfishSecureBootKeysProtocol.h
+  gEdkIIRedfishSecureBootKeysProtocolGuid   = { 0xea459862, 0x9b22, 0x475f, {0xb7, 0xcf, 0x22, 0xa6, 0x61, 0x6d, 0x82, 0x49 } }
 
 [Guids]
   ## Include/Guid/RedfishClientPkgTokenSpace.h
