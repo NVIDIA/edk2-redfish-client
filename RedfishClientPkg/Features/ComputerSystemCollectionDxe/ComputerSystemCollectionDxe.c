@@ -24,6 +24,7 @@ HandleResource (
   EFI_STRING           ConfigLang;
   EFI_STRING           ReturnedConfigLang;
   UINTN                Index;
+  BOOLEAN              SystemRestDetected;
 
   if ((Private == NULL) || IS_EMPTY_STRING (Uri)) {
     return EFI_INVALID_PARAMETER;
@@ -46,7 +47,8 @@ HandleResource (
   // Some resource is handled by other provider so we have to make sure this first.
   //
   DEBUG ((REDFISH_DEBUG_TRACE, "%a: Identify for %s\n", __func__, Uri));
-  ConfigLang = RedfishGetConfigLanguage (Uri);
+  SystemRestDetected = FALSE;
+  ConfigLang         = RedfishGetConfigLanguage (Uri);
   if (ConfigLang == NULL) {
     Status = EdkIIRedfishResourceConfigIdentify (&SchemaInfo, Uri, NULL, Private->InformationExchange);
     if (EFI_ERROR (Status)) {
@@ -55,7 +57,6 @@ HandleResource (
         return EFI_SUCCESS;
       } else if (Status == EFI_NOT_FOUND) {
         DEBUG ((DEBUG_MANAGEABILITY, "%a: \"%s\" has nothing to handle\n", __func__, Uri));
-        RedfishSetRedfishUri (L"/Systems/{1}", Uri);
         return EFI_SUCCESS;
       }
 
@@ -69,6 +70,7 @@ HandleResource (
     // a stale value so we will ignore pending settings in BMC.
     //
     DEBUG ((REDFISH_DEBUG_TRACE, "%a: system has been reset to default setting. Ignore pending settings because they may be stale values\n", __func__));
+    SystemRestDetected = TRUE;
   } else {
     DEBUG ((REDFISH_DEBUG_TRACE, "%a: history record found: %s\n", __func__, ConfigLang));
     //
@@ -124,10 +126,14 @@ HandleResource (
   //
   // Consume first.
   //
-  DEBUG ((REDFISH_DEBUG_TRACE, "%a consume for %s\n", __func__, Uri));
-  Status = EdkIIRedfishResourceConfigConsume (&SchemaInfo, Uri, NULL);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to consume resource for: %s: %r\n", __func__, Uri, Status));
+  if (SystemRestDetected) {
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a system has been reset to default setting. ignore pending settings because they may be stale values\n", __func__));
+  } else {
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a consume for %s\n", __func__, Uri));
+    Status = EdkIIRedfishResourceConfigConsume (&SchemaInfo, Uri, NULL);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: failed to consume resource for: %s: %r\n", __func__, Uri, Status));
+    }
   }
 
   //
