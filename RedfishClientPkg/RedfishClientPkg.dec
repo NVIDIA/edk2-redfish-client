@@ -31,6 +31,7 @@
   RedfishSecureBootKeysLib|Include/Library/RedfishSecureBootKeysLib.h
   RedfishMessageLib|Include/Library/RedfishMessageLib.h
   RedfishTaskLib|Include/Library/RedfishTaskLib.h
+  RedfishProtocolFeaturesLib|Include/Library/RedfishProtocolFeaturesLib.h
 
 [Protocols]
   ## Include/Protocol/EdkIIRedfishFeature.h
@@ -84,6 +85,9 @@
   gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishSystemRebootTimeout|5|UINT16|0x20000002
   ## Default capability of Redfish service side ETAG support
   gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishServiceEtagSupported|TRUE|BOOLEAN|0x10000005
+  # This is used to disable Redfish HTTP query by using "$expand" parameter even when
+  # Redfish service supports this query parameter.
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdHttpExpandQueryDisabled|FALSE|BOOLEAN|0x2000000A
 
 [PcdsDynamicEx]
   ## The flag used to indicate that system reboot is required due to system configuration change
