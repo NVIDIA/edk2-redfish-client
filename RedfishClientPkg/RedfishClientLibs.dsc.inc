@@ -47,3 +47,4 @@
   SecureBootVariableLib|SecurityPkg/Library/SecureBootVariableLib/SecureBootVariableLib.inf
   PlatformPKProtectionLib|SecurityPkg/Library/PlatformPKProtectionLibVarPolicy/PlatformPKProtectionLibVarPolicy.inf
   RedfishJsonBlobLib|RedfishClientPkg/Library/RedfishJsonBlobLib/RedfishJsonBlobLib.inf
+  RedfishSecureBootKeysLib|RedfishClientPkg/Library/RedfishSecureBootKeysLib/RedfishSecureBootKeysLib.inf
