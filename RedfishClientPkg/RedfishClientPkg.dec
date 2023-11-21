@@ -29,6 +29,7 @@
   RedfishVersionLib|Include/Library/RedfishVersionLib.h
   RedfishJsonBlobLib|Include/Library/RedfishJsonBlobLib.h
   RedfishSecureBootKeysLib|Include/Library/RedfishSecureBootKeysLib.h
+  RedfishMessageLib|Include/Library/RedfishMessageLib.h
 
 [Protocols]
   ## Include/Protocol/EdkIIRedfishFeature.h

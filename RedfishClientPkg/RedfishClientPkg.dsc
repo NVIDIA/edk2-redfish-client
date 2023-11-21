@@ -60,5 +60,6 @@
   RedfishClientPkg/Library/RedfishAddendumLib/RedfishAddendumLib.inf
   RedfishClientPkg/Library/RedfishJsonBlobLib/RedfishJsonBlobLib.inf
   RedfishClientPkg/Library/RedfishSecureBootKeysLib/RedfishSecureBootKeysLib.inf
+  RedfishClientPkg/Library/RedfishMessageLib/RedfishMessageLib.inf
 
   !include RedfishClientPkg/RedfishClient.dsc.inc
