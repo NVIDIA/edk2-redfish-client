@@ -1,4 +1,4 @@
-Werkzeug==0.16
+Werkzeug==2.3.8
 Jinja2==3.0.3
 itsdangerous==2.0.1
 flask==1.1.1
