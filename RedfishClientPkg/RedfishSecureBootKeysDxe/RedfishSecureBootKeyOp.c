@@ -11,6 +11,83 @@
 
 /**
 
+  This function change secure boot mode to custom secure boot
+  mode or standard secure boot mode. When setup mode is in setup mode and
+  CustomMode is TRUE, this function returns directly because there is no
+  need to change mode in this case.
+
+  @param[in]  CustomMode     TRUE to set secure boot mode to custom mode.
+                             FALSE to set secure boot mode to standard mode.
+
+  @retval     EFI_SUCCESS    Secure boot mode is set to desired mode.
+  @retval     Others         Errors occur.
+
+**/
+EFI_STATUS
+RfSecureBootSetCustomMode (
+  IN BOOLEAN  CustomMode
+  )
+{
+  EFI_STATUS  Status;
+  UINT8       SetupMode;
+  UINT8       *SecureBootMode;
+  UINT8       RequestSecureBootMode;
+
+  SecureBootMode        = NULL;
+  RequestSecureBootMode = (CustomMode ? CUSTOM_SECURE_BOOT_MODE : STANDARD_SECURE_BOOT_MODE);
+
+  if (CustomMode) {
+    Status = GetSetupMode (&SetupMode);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a: cannot get setup mode: %r\n", __func__, Status));
+      return Status;
+    }
+
+    //
+    // When it is setup mode, we don't need to switch mode to custom mode.
+    //
+    if (SetupMode == SETUP_MODE) {
+      return EFI_SUCCESS;
+    }
+  }
+
+  //
+  // Find current secure boot mode.
+  //
+  Status = GetVariable2 (
+             EFI_CUSTOM_MODE_NAME,
+             &gEfiCustomModeEnableGuid,
+             (VOID **)&SecureBootMode,
+             NULL
+             );
+  if (!EFI_ERROR (Status) && (SecureBootMode != NULL)) {
+    if (*SecureBootMode == RequestSecureBootMode) {
+      //
+      // secure boot mode is already set to requested mode.
+      //
+      goto ON_RELEASE;
+    }
+  }
+
+  //
+  // Switch to requested mode.
+  //
+  Status = SetSecureBootMode (RequestSecureBootMode);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to 0x%x: %r\n", __func__, Status, RequestSecureBootMode));
+  }
+
+ON_RELEASE:
+
+  if (SecureBootMode != NULL) {
+    FreePool (SecureBootMode);
+  }
+
+  return Status;
+}
+
+/**
+
   This function get current time on system.
 
   @param[in]  Time    Pointer to time instance.
@@ -930,11 +1007,28 @@ RedfishSecureBootEnrollKey (
   //
 
   //
+  // Switch to custom mode
+  //
+  Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
+    return Status;
+  }
+
+  //
   // Enroll single key to secure boot variable
   //
   Status = RfSecureBootEnrollSingleKey (VarInfo, &KeyTypeGuid, KeyData, KeySize);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: failed to enroll key to secure boot variable: %r\n", __func__, Status));
+  }
+
+  //
+  // Switch to standard mode
+  //
+  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
   }
 
   if (KeyData != NULL) {
@@ -1020,9 +1114,26 @@ RedfishSecureBootDeleteKey (
     goto ON_RELEASE;
   }
 
+  //
+  // Switch to custom mode
+  //
+  Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
+    return Status;
+  }
+
   Status = RfSecureBootDeleteSingleKey (VarInfo, KeyData->Hash);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: failed to delete key in secure boot variable: %r\n", __func__, Status));
+  }
+
+  //
+  // Switch to standard mode
+  //
+  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
   }
 
 ON_RELEASE:
@@ -1097,11 +1208,28 @@ RedfishSecureBootDeleteAllKeys (
   }
 
   //
+  // Switch to custom mode
+  //
+  Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
+    return Status;
+  }
+
+  //
   // Delete secure boot variable
   //
   Status = RfSecureBootDeleteVariable (VarInfo);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: delete %s failed: %r\n", __func__, KeyName, Status));
+  }
+
+  //
+  // Switch to standard mode
+  //
+  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
   }
 
   return Status;
@@ -1177,6 +1305,15 @@ RedfishSecureBootResetAllKeys (
   }
 
   //
+  // Switch to custom mode
+  //
+  Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
+    return Status;
+  }
+
+  //
   // Enroll key from data
   //
   if (Data != NULL) {
@@ -1186,6 +1323,14 @@ RedfishSecureBootResetAllKeys (
     }
 
     FreePool (Data);
+  }
+
+  //
+  // Switch to standard mode
+  //
+  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
   }
 
   return Status;
