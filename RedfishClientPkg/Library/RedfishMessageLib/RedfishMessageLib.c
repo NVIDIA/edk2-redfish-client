@@ -1,7 +1,7 @@
 /** @file
   Redfish debug library to debug Redfish application.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -60,7 +60,7 @@ RfMessageNewRecord (
     return NULL;
   }
 
-  NewRecord = AllocateZeroPool (sizeof (REDFISH_MESSAGE_ENTRY));
+  NewRecord = AllocateZeroPool (sizeof (REDFISH_MESSAGE_RECORD));
   if (NewRecord == NULL) {
     return NULL;
   }
