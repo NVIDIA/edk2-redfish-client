@@ -2,7 +2,7 @@
   Redfish feature driver implementation - common functions
 
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -12,17 +12,86 @@
 
 CHAR8  SecureBootEmptyJson[] = "{\"@odata.id\": \"\", \"@odata.type\": \"#SecureBoot.v1_1_0.SecureBoot\", \"Id\": \"\", \"Name\": \"\", \"Attributes\":{}}";
 
-REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate             = NULL;
-EFI_HANDLE                       mRedfishResourceConfigProtocolHandle = NULL;
+REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate                                  = NULL;
+EFI_HANDLE                       mRedfishResourceConfigProtocolHandle                      = NULL;
+CHAR16                           *mSecureBootSupportedAttributes[SECURE_BOOT_MODE_STR_LEN] = {
+  L"SecureBootCurrentBoot",
+  L"SecureBootEnable",
+  L"SecureBootMode"
+};
 
 /**
-  Consume resource from given URI.
+  Read EFI_SECURE_BOOT_ENABLE_NAME variable and return its value to caller.
+
+  @retval BOOLEAN    TRUE when EFI_SECURE_BOOT_ENABLE_NAME value is SECURE_BOOT_ENABLE
+                     FALSE when EFI_SECURE_BOOT_ENABLE_NAME value is SECURE_BOOT_DISABLE
+**/
+BOOLEAN
+RedfishReadSecureBootEnable (
+  VOID
+  )
+{
+  UINT8    *Buffer;
+  BOOLEAN  SecureBootEnableValue;
+
+  Buffer                = NULL;
+  SecureBootEnableValue = FALSE;
+
+  GetVariable2 (
+    EFI_SECURE_BOOT_ENABLE_NAME,
+    &gEfiSecureBootEnableDisableGuid,
+    (VOID **)&Buffer,
+    NULL
+    );
+
+  if (Buffer != NULL) {
+    if (*Buffer == SECURE_BOOT_ENABLE) {
+      SecureBootEnableValue = TRUE;
+    }
+
+    FreePool (Buffer);
+  }
+
+  return SecureBootEnableValue;
+}
+
+/**
+  Write EFI_SECURE_BOOT_ENABLE_NAME variable with given value.
+
+  @param[in]   SecureBootEnableValue    Value to write. TRUE is SECURE_BOOT_ENABLE.
+                                        FALSE is SECURE_BOOT_DISABLE.
+
+  @retval EFI_SUCCESS              Write value successfully.
+  @retval Others                   Some error happened.
+**/
+EFI_STATUS
+RedfishWriteSecureBootEnable (
+  BOOLEAN  SecureBootEnableValue
+  )
+{
+  EFI_STATUS  Status;
+  UINT8       VarValue;
+
+  VarValue = (SecureBootEnableValue ? SECURE_BOOT_ENABLE : SECURE_BOOT_DISABLE);
+  Status   = gRT->SetVariable (
+                    EFI_SECURE_BOOT_ENABLE_NAME,
+                    &gEfiSecureBootEnableDisableGuid,
+                    EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS,
+                    sizeof (VarValue),
+                    &VarValue
+                    );
+
+  return Status;
+}
+
+/**
+  Consume Redfish resource in given Json data.
 
   @param[in]   This                Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
   @param[in]   Json                The JSON to consume.
   @param[in]   HeaderEtag          The Etag string returned in HTTP header.
 
-  @retval EFI_SUCCESS              Value is returned successfully.
+  @retval EFI_SUCCESS              Consume Redfish attribute successfully.
   @retval Others                   Some error happened.
 
 **/
@@ -36,15 +105,15 @@ RedfishConsumeResourceCommon (
   EFI_STATUS                        Status;
   EFI_REDFISH_SECUREBOOT_V1_1_0     *SecureBoot;
   EFI_REDFISH_SECUREBOOT_V1_1_0_CS  *SecureBootCs;
-  EFI_STRING                        ConfigureLang;
+  BOOLEAN                           SecureBootEnableDisable;
 
   if ((Private == NULL) || IS_EMPTY_STRING (Json)) {
     return EFI_INVALID_PARAMETER;
   }
 
-  SecureBoot    = NULL;
-  SecureBootCs  = NULL;
-  ConfigureLang = NULL;
+  SecureBoot              = NULL;
+  SecureBootCs            = NULL;
+  SecureBootEnableDisable = RedfishReadSecureBootEnable ();
 
   Status = Private->JsonStructProtocol->ToStructure (
                                           Private->JsonStructProtocol,
@@ -75,19 +144,19 @@ RedfishConsumeResourceCommon (
   // Secure boot enable
   //
   if (SecureBootCs->SecureBootEnable != NULL) {
-    //
-    // Find corresponding configure language for collection resource.
-    //
-    ConfigureLang = GetConfigureLang (SecureBootCs->odata_id, "SecureBootEnable");
-    if (ConfigureLang != NULL) {
-      Status = ApplyFeatureSettingsBooleanType (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, ConfigureLang, *SecureBootCs->SecureBootEnable);
+    if (SecureBootEnableDisable != *SecureBootCs->SecureBootEnable) {
+      //
+      // Write value to "SecureBootEnable" variable. AuthVariableLib will enable or disable secure boot
+      // based on "SecureBootEnable" value.
+      //
+      Status = RedfishWriteSecureBootEnable (*SecureBootCs->SecureBootEnable);
       if (EFI_ERROR (Status)) {
-        DEBUG ((DEBUG_ERROR, "%a: apply setting for %s failed: %r\n", __func__, ConfigureLang, Status));
+        DEBUG ((DEBUG_ERROR, "%a: write secure boot enable disable failed: %r\n", __func__, Status));
+      } else {
+        REDFISH_ENABLE_SYSTEM_REBOOT ();
       }
-
-      FreePool (ConfigureLang);
     } else {
-      DEBUG ((DEBUG_ERROR, "%a: can not get configure language for URI: %s\n", __func__, Private->Uri));
+      DEBUG ((REDFISH_DEBUG_TRACE, "%a: secure boot mode is not changed\n", __func__));
     }
   }
 
@@ -104,6 +173,23 @@ ON_RELEASE:
   return EFI_SUCCESS;
 }
 
+/**
+  Provision Redfish resource. This function reads secure boot variable and convert it
+  to Redfish attribute.
+
+  @param[in]   JsonStructProtocol  Pointer to Json structure protocol.
+  @param[in]   InputJson           Jason data on input.
+  @param[in]   ResourceId          Resource ID. This is optional.
+  @param[in]   ConfigureLang       Configure language for this Redfish resource.
+  @param[in]   ProvisionMode       TRUE when this is to provision Redfish attribute to
+                                   Redfish service. FALSE is to update Redfish attribute
+                                   to Redfish service.
+  @param[out]  ResultJson          Json data on output.
+
+  @retval EFI_SUCCESS              Provision Redfish attribute successfully.
+  @retval Others                   Some error happened.
+
+**/
 EFI_STATUS
 ProvisioningSecureBootProperties (
   IN  EFI_REST_JSON_STRUCTURE_PROTOCOL  *JsonStructProtocol,
@@ -119,9 +205,10 @@ ProvisioningSecureBootProperties (
   EFI_STATUS                        Status;
   BOOLEAN                           PropertyChanged;
   CHAR8                             *AsciiStringValue;
-  BOOLEAN                           *BooleanValue;
   INT32                             *IntegerValue;
-  UINT8                             *SetupMode;
+  UINT8                             SetupMode;
+  BOOLEAN                           SecureBootEnabled;
+  BOOLEAN                           SecureBootEnableDisable;
 
   if ((JsonStructProtocol == NULL) || (ResultJson == NULL) || IS_EMPTY_STRING (InputJson) || IS_EMPTY_STRING (ConfigureLang)) {
     return EFI_INVALID_PARAMETER;
@@ -129,8 +216,11 @@ ProvisioningSecureBootProperties (
 
   DEBUG ((REDFISH_DEBUG_TRACE, "%a provision for %s with: %s\n", __func__, ConfigureLang, (ProvisionMode ? L"Provision resource" : L"Update resource")));
 
-  *ResultJson     = NULL;
-  PropertyChanged = FALSE;
+  *ResultJson             = NULL;
+  PropertyChanged         = FALSE;
+  AsciiStringValue        = NULL;
+  SecureBootEnableDisable = RedfishReadSecureBootEnable ();
+  SecureBootEnabled       = IsSecureBootEnabled ();
 
   SecureBoot = NULL;
   Status     = JsonStructProtocol->ToStructure (
@@ -161,15 +251,26 @@ ProvisioningSecureBootProperties (
   }
 
   //
+  // Secure boot variables that we will handle here
+  //
+  // EFI_SETUP_MODE_NAME (gEfiGlobalVariableGuid)
+  // EFI_SECURE_BOOT_MODE_NAME (gEfiGlobalVariableGuid)
+  // EFI_SECURE_BOOT_ENABLE_NAME (gEfiSecureBootEnableDisableGuid)
+  //
+
+  //
   // Current Boot
   //
   if (PropertyChecker (SecureBootCs->SecureBootCurrentBoot, ProvisionMode)) {
-    AsciiStringValue = GetPropertyStringValue (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, L"SecureBootCurrentBoot", ConfigureLang);
+    AsciiStringValue = AllocateZeroPool (SECURE_BOOT_MODE_STR_LEN * sizeof (CHAR8));
     if (AsciiStringValue != NULL) {
+      AsciiSPrint (AsciiStringValue, SECURE_BOOT_MODE_STR_LEN, "%a", (SecureBootEnabled ? SECURE_BOOT_ENABLED : SECURE_BOOT_DISABLED));
       if (ProvisionMode || (AsciiStrCmp (SecureBootCs->SecureBootCurrentBoot, AsciiStringValue) != 0)) {
         SecureBootCs->SecureBootCurrentBoot = AsciiStringValue;
         PropertyChanged                     = TRUE;
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: out of resource\n", __func__));
     }
   }
 
@@ -177,15 +278,14 @@ ProvisioningSecureBootProperties (
   // Secure boot enable
   //
   if (PropertyChecker (SecureBootCs->SecureBootEnable, ProvisionMode)) {
-    BooleanValue = GetPropertyBooleanValue (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, L"SecureBootEnable", ConfigureLang);
-    if (BooleanValue != NULL) {
-      if (ProvisionMode || (*SecureBootCs->SecureBootEnable != *BooleanValue)) {
-        IntegerValue = AllocatePool (sizeof (*IntegerValue));
-        if (IntegerValue != NULL) {
-          *IntegerValue                  = (*BooleanValue ? 0x01 : 0x00);
-          SecureBootCs->SecureBootEnable = IntegerValue;
-          PropertyChanged                = TRUE;
-        }
+    if (ProvisionMode || (*SecureBootCs->SecureBootEnable != SecureBootEnableDisable)) {
+      IntegerValue = AllocatePool (sizeof (*IntegerValue));
+      if (IntegerValue != NULL) {
+        *IntegerValue                  = (SecureBootEnableDisable ? 0x01 : 0x00);
+        SecureBootCs->SecureBootEnable = IntegerValue;
+        PropertyChanged                = TRUE;
+      } else {
+        DEBUG ((DEBUG_ERROR, "%a: out of resource\n", __func__));
       }
     }
   }
@@ -194,21 +294,18 @@ ProvisioningSecureBootProperties (
   // Secure boot mode
   //
   if (PropertyChecker (SecureBootCs->SecureBootMode, ProvisionMode)) {
-    //
-    // Secure boot config dxe has no "Setup Mode".
-    // Get it from variable.
-    //
-    GetVariable2 (EFI_SETUP_MODE_NAME, &gEfiGlobalVariableGuid, (VOID **)&SetupMode, NULL);
-    if (SetupMode != NULL) {
+    Status = GetSetupMode (&SetupMode);
+    if (!EFI_ERROR (Status)) {
       AsciiStringValue = AllocateZeroPool (SECURE_BOOT_MODE_STR_LEN *sizeof (CHAR8));
       if (AsciiStringValue != NULL) {
-        AsciiSPrint (AsciiStringValue, SECURE_BOOT_MODE_STR_LEN *sizeof (CHAR8), "%a", (*SetupMode == USER_MODE ? SECURE_BOOT_USER_MODE : SECURE_BOOT_SETUP_MODE));
-
+        AsciiSPrint (AsciiStringValue, SECURE_BOOT_MODE_STR_LEN *sizeof (CHAR8), "%a", (SetupMode == USER_MODE ? SECURE_BOOT_USER_MODE : SECURE_BOOT_SETUP_MODE));
         if (ProvisionMode || (AsciiStrCmp (SecureBootCs->SecureBootMode, AsciiStringValue) != 0)) {
           SecureBootCs->SecureBootMode = AsciiStringValue;
           PropertyChanged              = TRUE;
         }
       }
+    } else {
+      DEBUG ((DEBUG_ERROR, "%a: cannot read setup mode: %r\n", __func__, Status));
     }
   }
 
@@ -236,151 +333,22 @@ ProvisioningSecureBootProperties (
   return (PropertyChanged ? EFI_SUCCESS : EFI_NOT_FOUND);
 }
 
+/**
+  Provision Redfish resource and upload data to Redfish service. This function
+  checks OEM data and platform addendum data before sending data to Redfish service.
+
+  @param[in]   Private   Pointer to private data.
+
+  @retval EFI_SUCCESS              Provision Redfish resource successfully.
+  @retval Others                   Some error happened.
+
+**/
 EFI_STATUS
 ProvisioningSecureBootResource (
-  IN  REDFISH_RESOURCE_COMMON_PRIVATE  *Private,
-  IN  UINTN                            Index,
-  IN  EFI_STRING                       ConfigureLang
-  )
-{
-  CHAR8             *Json;
-  CHAR8             *JsonWithAddendum;
-  EFI_STATUS        Status;
-  EFI_STRING        NewResourceLocation;
-  CHAR8             ResourceId[16];
-  REDFISH_RESPONSE  Response;
-
-  if (IS_EMPTY_STRING (ConfigureLang) || (Private == NULL)) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
-  NewResourceLocation = NULL;
-  AsciiSPrint (ResourceId, sizeof (ResourceId), "%d", Index);
-
-  Status = ProvisioningSecureBootProperties (
-             Private->JsonStructProtocol,
-             SecureBootEmptyJson,
-             ResourceId,
-             ConfigureLang,
-             TRUE,
-             &Json
-             );
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: provisioning resource for %s failed: %r\n", __func__, ConfigureLang, Status));
-    return Status;
-  }
-
-  //
-  // Check and see if platform has OEM data or not
-  //
-  Status = RedfishGetOemData (
-             Private->Uri,
-             RESOURCE_SCHEMA,
-             RESOURCE_SCHEMA_VERSION,
-             Json,
-             &JsonWithAddendum
-             );
-  if (!EFI_ERROR (Status) && (JsonWithAddendum != NULL)) {
-    FreePool (Json);
-    Json             = JsonWithAddendum;
-    JsonWithAddendum = NULL;
-  }
-
-  //
-  // Check and see if platform has addendum data or not
-  //
-  Status = RedfishGetAddendumData (
-             Private->Uri,
-             RESOURCE_SCHEMA,
-             RESOURCE_SCHEMA_VERSION,
-             Json,
-             &JsonWithAddendum
-             );
-  if (!EFI_ERROR (Status) && (JsonWithAddendum != NULL)) {
-    FreePool (Json);
-    Json             = JsonWithAddendum;
-    JsonWithAddendum = NULL;
-  }
-
-  Status = RedfishHttpPostResource (Private->RedfishService, Private->Uri, Json, &Response);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: post SecureBoot resource for %s failed: %r\n", __func__, ConfigureLang, Status));
-    goto RELEASE_RESOURCE;
-  }
-
-  //
-  // per Redfish spec. the URL of new resource will be returned in "Location" header.
-  //
-  Status = GetEtagAndLocation (&Response, NULL, &NewResourceLocation);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __func__, Status));
-    goto RELEASE_RESOURCE;
-  }
-
-  //
-  // Keep location of new resource.
-  //
-  if (NewResourceLocation != NULL) {
-    RedfishSetRedfishUri (ConfigureLang, NewResourceLocation);
-  }
-
-RELEASE_RESOURCE:
-
-  if (NewResourceLocation != NULL) {
-    FreePool (NewResourceLocation);
-  }
-
-  if (Json != NULL) {
-    FreePool (Json);
-  }
-
-  RedfishHttpFreeResource (&Response);
-
-  return Status;
-}
-
-EFI_STATUS
-ProvisioningSecureBootResources (
-  IN  REDFISH_RESOURCE_COMMON_PRIVATE  *Private
-  )
-{
-  UINTN                                        Index;
-  EFI_STATUS                                   Status;
-  REDFISH_FEATURE_ARRAY_TYPE_CONFIG_LANG_LIST  UnifiedConfigureLangList;
-
-  if (Private == NULL) {
-    return EFI_INVALID_PARAMETER;
-  }
-
-  Status = RedfishFeatureGetUnifiedArrayTypeConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, REDPATH_ARRAY_PATTERN, &UnifiedConfigureLangList);
-  if (EFI_ERROR (Status) || (UnifiedConfigureLangList.Count == 0)) {
-    DEBUG ((DEBUG_ERROR, "%a: No HII question found with configure language: %s: %r\n", __func__, REDPATH_ARRAY_PATTERN, Status));
-    return EFI_NOT_FOUND;
-  }
-
-  //
-  // Set the configuration language in the RESOURCE_INFORMATION_EXCHANGE.
-  // This information is sent back to the parent resource (e.g. the collection driver).
-  //
-  EdkIIRedfishResourceSetConfigureLang (mRedfishResourceConfigProtocolHandle, &UnifiedConfigureLangList);
-
-  for (Index = 0; Index < UnifiedConfigureLangList.Count; Index++) {
-    DEBUG ((REDFISH_DEBUG_TRACE, "[%d] create SecureBoot resource from: %s\n", UnifiedConfigureLangList.List[Index].Index, UnifiedConfigureLangList.List[Index].ConfigureLang));
-    ProvisioningSecureBootResource (Private, UnifiedConfigureLangList.List[Index].Index, UnifiedConfigureLangList.List[Index].ConfigureLang);
-    FreePool (UnifiedConfigureLangList.List[Index].ConfigureLang);
-  }
-
-  return EFI_SUCCESS;
-}
-
-EFI_STATUS
-ProvisioningSecureBootExistResource (
   IN  REDFISH_RESOURCE_COMMON_PRIVATE  *Private
   )
 {
   EFI_STATUS        Status;
-  EFI_STRING        ConfigureLang;
   CHAR8             *Json;
   CHAR8             *JsonWithAddendum;
   REDFISH_RESPONSE  Response;
@@ -390,28 +358,22 @@ ProvisioningSecureBootExistResource (
   }
 
   ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
-  Json          = NULL;
-  ConfigureLang = NULL;
-
-  ConfigureLang = RedfishGetConfigLanguage (Private->Uri);
-  if (ConfigureLang == NULL) {
-    return EFI_NOT_FOUND;
-  }
+  Json = NULL;
 
   Status = ProvisioningSecureBootProperties (
              Private->JsonStructProtocol,
              SecureBootEmptyJson,
              NULL,
-             ConfigureLang,
+             REDFISH_DUMMY_CONFIG_LANG,
              TRUE,
              &Json
              );
   if (EFI_ERROR (Status)) {
     if (Status == EFI_NOT_FOUND) {
-      DEBUG ((REDFISH_DEBUG_TRACE, "%a: provisioning existing resource for %s ignored. Nothing changed\n", __func__, ConfigureLang));
+      DEBUG ((REDFISH_DEBUG_TRACE, "%a: provisioning existing resource for %s ignored. Nothing changed\n", __func__, REDFISH_DUMMY_CONFIG_LANG));
       Status = EFI_SUCCESS;
     } else {
-      DEBUG ((DEBUG_ERROR, "%a: provisioning existing resource for %s failed: %r\n", __func__, ConfigureLang, Status));
+      DEBUG ((DEBUG_ERROR, "%a: provisioning existing resource for %s failed: %r\n", __func__, REDFISH_DUMMY_CONFIG_LANG, Status));
     }
 
     goto ON_RELEASE;
@@ -449,14 +411,14 @@ ProvisioningSecureBootExistResource (
     JsonWithAddendum = NULL;
   }
 
-  DEBUG ((REDFISH_DEBUG_TRACE, "%a: provisioning existing resource for %s\n", __func__, ConfigureLang));
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a: provisioning existing resource for %s\n", __func__, REDFISH_DUMMY_CONFIG_LANG));
 
   //
   // PATCH back to instance
   //
   Status = RedfishHttpPatchResource (Private->RedfishService, Private->Uri, Json, &Response);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: patch resource for %s failed: %r\n", __func__, ConfigureLang, Status));
+    DEBUG ((DEBUG_ERROR, "%a: patch resource for %s failed: %r\n", __func__, REDFISH_DUMMY_CONFIG_LANG, Status));
   }
 
 ON_RELEASE:
@@ -465,23 +427,19 @@ ON_RELEASE:
     FreePool (Json);
   }
 
-  if (ConfigureLang != NULL) {
-    FreePool (ConfigureLang);
-  }
-
   RedfishHttpFreeResource (&Response);
 
   return Status;
 }
 
 /**
-  Provisioning redfish resource by given URI.
+  Provisioning redfish resource to Redfish service.
 
-  @param[in]   This                Pointer to EFI_HP_REDFISH_HII_PROTOCOL instance.
+  @param[in]   Private             Pointer to private data.
   @param[in]   ResourceExist       TRUE if resource exists, PUT method will be used.
                                    FALSE if resource does not exist POST method is used.
 
-  @retval EFI_SUCCESS              Value is returned successfully.
+  @retval EFI_SUCCESS              Provision resource successfully.
   @retval Others                   Some error happened.
 
 **/
@@ -495,17 +453,17 @@ RedfishProvisioningResourceCommon (
     return EFI_INVALID_PARAMETER;
   }
 
-  return (ResourceExist ? ProvisioningSecureBootExistResource (Private) : ProvisioningSecureBootResources (Private));
+  return ProvisioningSecureBootResource (Private);
 }
 
 /**
-  Check resource from given URI.
+  Check resource from given Json data.
 
   @param[in]   This                Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
-  @param[in]   Json                The JSON to consume.
+  @param[in]   Json                The JSON data to check.
   @param[in]   HeaderEtag          The Etag string returned in HTTP header.
 
-  @retval EFI_SUCCESS              Value is returned successfully.
+  @retval EFI_SUCCESS              Check resource successfully.
   @retval Others                   Some error happened.
 
 **/
@@ -518,7 +476,6 @@ RedfishCheckResourceCommon (
 {
   UINTN       Index;
   EFI_STATUS  Status;
-  EFI_STRING  *ConfigureLangList;
   UINTN       Count;
   EFI_STRING  Property;
 
@@ -537,19 +494,14 @@ RedfishCheckResourceCommon (
     return EFI_SUCCESS;
   }
 
-  Status = RedfishPlatformConfigGetConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, REDPATH_ARRAY_PATTERN, &ConfigureLangList, &Count);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: SecureBootConfigToRedfishGetConfigureLangRegex failed: %r\n", __func__, Status));
-    return Status;
-  }
-
+  Count = sizeof (mSecureBootSupportedAttributes) / sizeof (mSecureBootSupportedAttributes[0]);
   if (Count == 0) {
     return EFI_UNSUPPORTED;
   }
 
-  Status = EFI_NOT_FOUND;
+  Status = EFI_SUCCESS;
   for (Index = 0; Index < Count; Index++) {
-    Property = GetPropertyFromConfigureLang (Private->Uri, ConfigureLangList[Index]);
+    Property = mSecureBootSupportedAttributes[Index];
     if (Property == NULL) {
       continue;
     }
@@ -557,30 +509,20 @@ RedfishCheckResourceCommon (
     DEBUG ((REDFISH_DEBUG_TRACE, "%a: [%d] check attribute for: %s\n", __func__, Index, Property));
     if (!MatchPropertyWithJsonContext (Property, Json)) {
       DEBUG ((REDFISH_DEBUG_TRACE, "%a: property is missing: %s\n", __func__, Property));
-    } else {
-      //
-      // When there is any attribute found in /SecureBoot/Attributes, it means that
-      // the provisioning was performed before. Any missing attribute will
-      // be handled by update operation.
-      // When all attributes are missing in /SecureBoot/Attributes, provisioning is
-      // performed.
-      //
-      Status = EFI_SUCCESS;
+      Status = EFI_NOT_FOUND;
     }
   }
-
-  FreePool (ConfigureLangList);
 
   return Status;
 }
 
 /**
-  Update resource to given URI.
+  Update resource to Redfish service.
 
-  @param[in]   This                Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
-  @param[in]   Json                The JSON to consume.
+  @param[in]   Private             Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
+  @param[in]   Json                The JSON data to be updated.
 
-  @retval EFI_SUCCESS              Value is returned successfully.
+  @retval EFI_SUCCESS              Update resource successfully.
   @retval Others                   Some error happened.
 
 **/
@@ -593,7 +535,6 @@ RedfishUpdateResourceCommon (
   EFI_STATUS        Status;
   CHAR8             *Json;
   CHAR8             *JsonWithAddendum;
-  EFI_STRING        ConfigureLang;
   REDFISH_RESPONSE  Response;
 
   if ((Private == NULL) || IS_EMPTY_STRING (InputJson)) {
@@ -601,28 +542,22 @@ RedfishUpdateResourceCommon (
   }
 
   ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
-  Json          = NULL;
-  ConfigureLang = NULL;
-
-  ConfigureLang = RedfishGetConfigLanguage (Private->Uri);
-  if (ConfigureLang == NULL) {
-    return EFI_NOT_FOUND;
-  }
+  Json = NULL;
 
   Status = ProvisioningSecureBootProperties (
              Private->JsonStructProtocol,
              SecureBootEmptyJson,
              NULL,
-             ConfigureLang,
+             REDFISH_DUMMY_CONFIG_LANG,
              TRUE,
              &Json
              );
   if (EFI_ERROR (Status)) {
     if (Status == EFI_NOT_FOUND) {
-      DEBUG ((REDFISH_DEBUG_TRACE, "%a: update resource for %s ignored. Nothing changed\n", __func__, ConfigureLang));
+      DEBUG ((REDFISH_DEBUG_TRACE, "%a: update resource for %s ignored. Nothing changed\n", __func__, REDFISH_DUMMY_CONFIG_LANG));
       Status = EFI_SUCCESS;
     } else {
-      DEBUG ((DEBUG_ERROR, "%a: update resource for %s failed: %r\n", __func__, ConfigureLang, Status));
+      DEBUG ((DEBUG_ERROR, "%a: update resource for %s failed: %r\n", __func__, REDFISH_DUMMY_CONFIG_LANG, Status));
     }
 
     goto ON_RELEASE;
@@ -660,14 +595,14 @@ RedfishUpdateResourceCommon (
     JsonWithAddendum = NULL;
   }
 
-  DEBUG ((REDFISH_DEBUG_TRACE, "%a: update resource for %s\n", __func__, ConfigureLang));
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a: update resource for %s\n", __func__, REDFISH_DUMMY_CONFIG_LANG));
 
   //
   // PATCH back to instance
   //
   Status = RedfishHttpPatchResource (Private->RedfishService, Private->Uri, Json, &Response);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: patch resource for %s failed: %r\n", __func__, ConfigureLang, Status));
+    DEBUG ((DEBUG_ERROR, "%a: patch resource for %s failed: %r\n", __func__, REDFISH_DUMMY_CONFIG_LANG, Status));
   }
 
 ON_RELEASE:
@@ -676,22 +611,18 @@ ON_RELEASE:
     FreePool (Json);
   }
 
-  if (ConfigureLang != NULL) {
-    FreePool (ConfigureLang);
-  }
-
   RedfishHttpFreeResource (&Response);
 
   return Status;
 }
 
 /**
-  Identify resource from given URI.
+  Identify resource in given Json data.
 
-  @param[in]   This                Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
-  @param[in]   Json                The JSON to consume.
+  @param[in]   Private             Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
+  @param[in]   Json                The JSON to be identified.
 
-  @retval EFI_SUCCESS              Value is returned successfully.
+  @retval EFI_SUCCESS              Identify resource successfully.
   @retval Others                   Some error happened.
 
 **/
@@ -701,57 +632,29 @@ RedfishIdentifyResourceCommon (
   IN     CHAR8                            *Json
   )
 {
-  BOOLEAN                                      Supported;
-  EFI_STATUS                                   Status;
-  EFI_STRING                                   EndOfChar;
-  REDFISH_FEATURE_ARRAY_TYPE_CONFIG_LANG_LIST  ConfigLangList;
+  BOOLEAN  Supported;
 
   Supported = RedfishIdentifyResource (Private->Uri, Private->Json);
   if (Supported) {
-    Status = RedfishFeatureGetUnifiedArrayTypeConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, REDPATH_ARRAY_PATTERN, &ConfigLangList);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: SecureBootConfigToRedfishGetConfigureLangRegex failed: %r\n", __func__, Status));
-      return Status;
-    }
-
-    if (ConfigLangList.Count == 0) {
-      return EFI_SUCCESS;
-    }
-
-    // EndOfChar = StrStr (ConfigLangList.List[0].ConfigureLang, L"}");
-    Status = IsRedpathArray (ConfigLangList.List[0].ConfigureLang, NULL, &EndOfChar);
-    if (EFI_ERROR (Status) && (Status != EFI_NOT_FOUND)) {
-      ASSERT (FALSE);
-      return EFI_DEVICE_ERROR;
-    }
-
-    if (Status != EFI_SUCCESS) {
-      //
-      // This is not the collection config language.
-      //
-      GetRedpathNodeByIndex (ConfigLangList.List[0].ConfigureLang, 0, &EndOfChar);
-    }
-
-    if (EndOfChar != NULL) {
-      *(++EndOfChar) = '\0';
-    }
-
     //
     // Keep URI and ConfigLang mapping
     //
-    RedfishSetRedfishUri (ConfigLangList.List[0].ConfigureLang, Private->Uri);
-    //
-    // Set the configuration language in the RESOURCE_INFORMATION_EXCHANGE.
-    // This information is sent back to the parent resource (e.g. the collection driver).
-    //
-    EdkIIRedfishResourceSetConfigureLang (mRedfishResourceConfigProtocolHandle, &ConfigLangList);
-    DestroyConfiglanguageList (&ConfigLangList);
-    return EFI_SUCCESS;
+    RedfishSetRedfishUri (REDFISH_DUMMY_CONFIG_LANG, Private->Uri);
   }
 
-  return EFI_UNSUPPORTED;
+  return (Supported ? EFI_SUCCESS : EFI_UNSUPPORTED);
 }
 
+/**
+  Handle Redfish resource in Uri.
+
+  @param[in]   Private             Pointer to REDFISH_RESOURCE_COMMON_PRIVATE instance.
+  @param[in]   Uri                 URI to Redfish resource that we like to process.
+
+  @retval EFI_SUCCESS              Handle resource successfully.
+  @retval Others                   Some error happened.
+
+**/
 EFI_STATUS
 HandleResource (
   IN  REDFISH_RESOURCE_COMMON_PRIVATE  *Private,

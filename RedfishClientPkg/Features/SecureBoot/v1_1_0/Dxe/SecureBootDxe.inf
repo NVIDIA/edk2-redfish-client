@@ -1,7 +1,7 @@
 ## @file
 #
 #  (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-#  Copyright (c) 2022-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 #
@@ -20,6 +20,7 @@
 [Packages]
   MdePkg/MdePkg.dec
   MdeModulePkg/MdeModulePkg.dec
+  SecurityPkg/SecurityPkg.dec
   RedfishPkg/RedfishPkg.dec
   RedfishClientPkg/RedfishClientPkg.dec
 
@@ -36,9 +37,11 @@
   RedfishFeatureUtilityLib
   RedfishVersionLib
   RedfishResourceIdentifyLib
+  SecureBootVariableLib
   UefiLib
   UefiDriverEntryPoint
   RedfishAddendumLib
+  UefiRuntimeServicesTableLib
 
 [Protocols]
   gEdkIIRedfishConfigHandlerProtocolGuid          ## PRODUCED
@@ -46,9 +49,13 @@
   gEdkIIRedfishResourceConfigProtocolGuid         ## PRODUCED
   gEdkIIRedfishFeatureProtocolGuid                ## CONSUMED
 
+[Guids]
+  gEfiSecureBootEnableDisableGuid                 ## CONSUMED
+
 [Pcd]
   gEfiRedfishClientPkgTokenSpaceGuid.PcdMaxRedfishSchemaStringSize
   gEfiRedfishClientPkgTokenSpaceGuid.PcdMaxRedfishSchemaVersionSize
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishSystemRebootRequired
 
 [Depex]
   TRUE
