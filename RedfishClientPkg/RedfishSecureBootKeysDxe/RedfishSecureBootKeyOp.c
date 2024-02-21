@@ -1,7 +1,7 @@
 /** @file
   Redfish secure boot keys driver to track secure boot keys between system boots.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -587,7 +587,7 @@ RfSecureBootEnrollSingleKey (
                     );
     if (Status != EFI_NOT_FOUND) {
       Status = EFI_SECURITY_VIOLATION;
-      DEBUG ((DEBUG_ERROR, "%a: There is PK in system already. We cannot enroll multiple PK in system: %r\n", __func__, VarInfo->VariableName, Status));
+      DEBUG ((DEBUG_ERROR, "%a: There is PK in system already. We cannot enroll multiple PK in system: %r\n", __func__, Status));
       goto ON_RELEASE;
     }
 
@@ -1012,7 +1012,7 @@ RedfishSecureBootEnrollKey (
   Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
-    return Status;
+    goto ON_RELEASE;
   }
 
   //
@@ -1026,10 +1026,9 @@ RedfishSecureBootEnrollKey (
   //
   // Switch to standard mode
   //
-  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
-  }
+  REDFISH_SECURE_BOOT_STANDARD_MODE ();
+
+ON_RELEASE:
 
   if (KeyData != NULL) {
     FreePool (KeyData);
@@ -1120,7 +1119,7 @@ RedfishSecureBootDeleteKey (
   Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
-    return Status;
+    goto  ON_RELEASE;
   }
 
   Status = RfSecureBootDeleteSingleKey (VarInfo, KeyData->Hash);
@@ -1131,10 +1130,7 @@ RedfishSecureBootDeleteKey (
   //
   // Switch to standard mode
   //
-  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
-  }
+  REDFISH_SECURE_BOOT_STANDARD_MODE ();
 
 ON_RELEASE:
 
@@ -1227,10 +1223,7 @@ RedfishSecureBootDeleteAllKeys (
   //
   // Switch to standard mode
   //
-  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
-  }
+  REDFISH_SECURE_BOOT_STANDARD_MODE ();
 
   return Status;
 }
@@ -1310,7 +1303,7 @@ RedfishSecureBootResetAllKeys (
   Status = REDFISH_SECURE_BOOT_CUSTOM_MODE ();
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to custom mode: %r\n", __func__, Status));
-    return Status;
+    goto ON_RELEASE;
   }
 
   //
@@ -1321,16 +1314,17 @@ RedfishSecureBootResetAllKeys (
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "%a: cannot enroll key: %s: %r\n", __func__, DefaultVarInfo->VariableName, Status));
     }
-
-    FreePool (Data);
   }
 
   //
   // Switch to standard mode
   //
-  Status = REDFISH_SECURE_BOOT_STANDARD_MODE ();
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot set secure boot mode to standard mode: %r\n", __func__, Status));
+  REDFISH_SECURE_BOOT_STANDARD_MODE ();
+
+ON_RELEASE:
+
+  if (Data != NULL) {
+    FreePool (Data);
   }
 
   return Status;
