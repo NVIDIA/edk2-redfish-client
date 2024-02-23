@@ -1,7 +1,7 @@
 /** @file
   Redfish secure boot keys library to track secure boot keys between system boots.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -378,6 +378,10 @@ RfHashSecureBootKey (
     return EFI_NOT_READY;
   }
 
+  if ((Data == NULL) || (DataSize == 0) || (HashCtx == NULL) || (HashCtxSize == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   Status = mSecureBootKeysPrivate->Hash2Protocol->GetHashSize (
                                                     mSecureBootKeysPrivate->Hash2Protocol,
                                                     REDFISH_SECURE_BOOT_HASH_ALGORITHM,
@@ -459,6 +463,58 @@ RfBlobToHexString (
   }
 
   return BlobStr;
+}
+
+/**
+  This function returns the secure boot key hash string in input
+  signature data. It's call responsibility to release returned string
+  by calling FreePool().
+
+  @param[in]  SigData      Signature data contains key blob.
+  @param[in]  SigDataSize  The size of SigData.
+
+  @retval CHAR8 *          The ASCII string representation of secure boot key.
+  @retval NULL             Error occurs.
+**/
+CHAR8 *
+RfGetSecureBootKeyHash (
+  IN  EFI_SIGNATURE_DATA  *SigData,
+  IN  UINTN               SigDataSize
+  )
+{
+  EFI_STATUS  Status;
+  CHAR8       *HashStr;
+  UINT8       *HashCtx;
+  UINTN       HashCtxSize;
+  UINT8       *KeyData;
+  UINTN       KeySize;
+
+  if ((SigData == NULL) || (SigDataSize == 0)) {
+    return NULL;
+  }
+
+  HashStr     = NULL;
+  KeyData     = NULL;
+  KeySize     = 0;
+  HashCtx     = NULL;
+  HashCtxSize = 0;
+
+  KeySize = SigDataSize - sizeof (EFI_SIGNATURE_DATA) + 1;
+  KeyData = SigData->SignatureData;
+
+  Status = RfHashSecureBootKey ((VOID *)KeyData, KeySize, &HashCtx, &HashCtxSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot get hash of key: %r\n", __func__, Status));
+    return NULL;
+  }
+
+  HashStr = RfBlobToHexString (HashCtx, HashCtxSize);
+
+  if (HashCtx != NULL) {
+    FreePool (HashCtx);
+  }
+
+  return HashStr;
 }
 
 /**
@@ -818,22 +874,18 @@ RfSecureBootKeyAddDataFromVariable (
 {
   REDFISH_SECURE_BOOT_KEY_DATA       *NewData;
   REDFISH_SECURE_BOOT_KEY_DATA       *OldData;
-  UINT8                              *HashCtx;
-  UINTN                              HashCtxSize;
   CHAR8                              *HashStr;
   EFI_STATUS                         Status;
   BOOLEAN                            IsCertificate;
   REDFISH_SECURE_BOOT_KEY_LIST_INFO  *KeyList;
 
-  if ((KeyInfo == NULL) || (Type == NULL) || IS_EMPTY_STRING (Uri)) {
+  if ((KeyInfo == NULL) || (Type == NULL) || IS_EMPTY_STRING (Uri) || (Data == NULL) || (DataSize == 0)) {
     return EFI_INVALID_PARAMETER;
   }
 
-  NewData     = NULL;
-  OldData     = NULL;
-  HashCtx     = NULL;
-  HashCtxSize = 0;
-  HashStr     = NULL;
+  NewData = NULL;
+  OldData = NULL;
+  HashStr = NULL;
 
   if (KeyInfo->TotalCount > KeyInfo->KeyVarInfo->MaxCount) {
     DEBUG ((DEBUG_ERROR, "%a: maximum number of key reached: %d/%d\n", __func__, KeyInfo->TotalCount, KeyInfo->KeyVarInfo->MaxCount));
@@ -841,15 +893,9 @@ RfSecureBootKeyAddDataFromVariable (
   }
 
   //
-  // Get hash of signature data.
+  // Get hash string of signature data.
   //
-  Status = RfHashSecureBootKey ((VOID *)Data, DataSize, &HashCtx, &HashCtxSize);
-  if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: cannot get hash of key: %r\n", __func__, Status));
-    return Status;
-  }
-
-  HashStr = RfBlobToHexString (HashCtx, HashCtxSize);
+  HashStr = RfGetSecureBootKeyHash (Data, DataSize);
   if (HashStr == NULL) {
     Status = EFI_OUT_OF_RESOURCES;
     goto ON_ERROR;
@@ -909,10 +955,6 @@ RfSecureBootKeyAddDataFromVariable (
 
 ON_RELEASE:
 
-  if (HashCtx != NULL) {
-    FreePool (HashCtx);
-  }
-
   if (HashStr != NULL) {
     FreePool (HashStr);
   }
@@ -920,10 +962,6 @@ ON_RELEASE:
   return EFI_SUCCESS;
 
 ON_ERROR:
-
-  if (HashCtx != NULL) {
-    FreePool (HashCtx);
-  }
 
   if (HashStr != NULL) {
     FreePool (HashStr);

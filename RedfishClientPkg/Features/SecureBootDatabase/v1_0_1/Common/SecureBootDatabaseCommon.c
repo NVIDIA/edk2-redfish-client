@@ -2,7 +2,7 @@
   Redfish feature driver implementation - common functions
 
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -1238,6 +1238,8 @@ RedfishTaskCallback (
       ReportTaskFailure (TaskId, REDFISH_TASK_FAILURE_UNSUPPORTED_MESSAGE);
     } else if ((Status == EFI_ACCESS_DENIED) || (Status == EFI_SECURITY_VIOLATION) || (Status == EFI_WRITE_PROTECTED)) {
       ReportTaskFailure (TaskId, REDFISH_TASK_FAILURE_ACCESS_DENIED_MESSAGE);
+    } else if (Status == EFI_ALREADY_STARTED) {
+      ReportTaskFailure (TaskId, REDFISH_TASK_FAILURE_DUPLICATED_KEY_MESSAGE);
     }
 
     ReportTaskFailure (TaskId, REDFISH_TASK_FAILURE_GENERIC_MESSAGE);

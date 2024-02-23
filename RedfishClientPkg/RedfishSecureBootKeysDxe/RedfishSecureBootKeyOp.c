@@ -11,6 +11,100 @@
 
 /**
 
+  This function check history table to see if input key is enrolled in
+  system or not.
+
+  @param[in]  VarInfo       Secure boot variable information.
+  @param[in]  KeyData       Secure boot key to check.
+  @param[in]  KeySize       The size of KeyData.
+  @param[in]  IsCertificate TRUE if this key is certificate.FALSE otherwise.
+s
+  @retval     TRUE          This key can be found in database. It is duplicated key.
+  @retval     FALSE         This key cannot be found in database.
+
+**/
+BOOLEAN
+RfSecureBootCheckDuplicatedKey (
+  IN SECURE_BOOT_KEY_VARIABLE_INFO  *VarInfo,
+  IN UINT8                          *KeyData,
+  IN UINTN                          KeySize,
+  IN BOOLEAN                        IsCertificate
+  )
+{
+  EFI_STATUS                    Status;
+  REDFISH_SECURE_BOOT_KEY_DATA  *HistoricalKeyData;
+  REDFISH_SECURE_BOOT_KEY_INFO  *SecureBootKeyInfo;
+  UINT8                         *HashCtx;
+  UINTN                         HashCtxSize;
+  CHAR8                         *HashStr;
+  BOOLEAN                       KeyFound;
+
+  if ((VarInfo == NULL) || (KeyData == NULL) || (KeySize == 0)) {
+    return FALSE;
+  }
+
+  HistoricalKeyData = NULL;
+  SecureBootKeyInfo = NULL;
+  HashCtx           = NULL;
+  HashStr           = NULL;
+  HashCtxSize       = 0;
+  KeyFound          = FALSE;
+
+  //
+  // Load history table to see if this key exists or not.
+  //
+  Status = RfOpenHistoryTable (VarInfo, &SecureBootKeyInfo);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: load history table %s failed: %r\n", __func__, VarInfo->VariableName, Status));
+    return FALSE;
+  }
+
+  //
+  // Get hash of signature data.
+  //
+  Status = RfHashSecureBootKey ((VOID *)KeyData, KeySize, &HashCtx, &HashCtxSize);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot get hash of key: %r\n", __func__, Status));
+    goto ON_RELEASE;
+  }
+
+  HashStr = RfBlobToHexString (HashCtx, HashCtxSize);
+  if (HashStr == NULL) {
+    goto ON_RELEASE;
+  }
+
+  //
+  // Check to see if we have this key in database or not. If user enrolls duplicated key,
+  // return failure to caller.
+  //
+  HistoricalKeyData = RfSecureBootKeyFindData (SecureBootKeyInfo, HashStr, IsCertificate);
+  if (HistoricalKeyData != NULL) {
+    DEBUG ((REDFISH_SECURE_BOOT_KEY_DEBUG, "%a: key found in history table and its hash is: %a\n", __func__, HistoricalKeyData->Hash));
+    KeyFound = TRUE;
+  }
+
+ON_RELEASE:
+
+  if (HashCtx != NULL) {
+    FreePool (HashCtx);
+  }
+
+  if (HashStr != NULL) {
+    FreePool (HashStr);
+  }
+
+  //
+  // Close history table without touching it.
+  //
+  if (SecureBootKeyInfo != NULL) {
+    RfCloseHistoryTable (SecureBootKeyInfo, FALSE);
+  }
+
+  return KeyFound;
+}
+
+/**
+
   This function change secure boot mode to custom secure boot
   mode or standard secure boot mode. When setup mode is in setup mode and
   CustomMode is TRUE, this function returns directly because there is no
@@ -697,8 +791,6 @@ RfSecureBootDeleteSingleKey (
   UINTN               CertDataSize;
   UINTN               SigCount;
   UINTN               Index;
-  UINT8               *HashCtx;
-  UINTN               HashCtxSize;
   CHAR8               *HashStr;
   BOOLEAN             KeyDeleted;
   UINT8               *NewData;
@@ -718,8 +810,6 @@ RfSecureBootDeleteSingleKey (
 
   VarData        = NULL;
   VarSize        = 0;
-  HashCtxSize    = 0;
-  HashCtx        = NULL;
   HashStr        = NULL;
   NewData        = NULL;
   NewDataSize    = 0;
@@ -789,15 +879,9 @@ RfSecureBootDeleteSingleKey (
       //
       if (!KeyDeleted) {
         //
-        // Get the hash of this key
+        // Get hash string of signature data.
         //
-        Status = RfHashSecureBootKey ((VOID *)Cert, CertList->SignatureSize, &HashCtx, &HashCtxSize);
-        if (EFI_ERROR (Status)) {
-          DEBUG ((DEBUG_ERROR, "%a: cannot get hash of key: %r\n", __func__, Status));
-          continue;
-        }
-
-        HashStr = RfBlobToHexString (HashCtx, HashCtxSize);
+        HashStr = RfGetSecureBootKeyHash (Cert, CertList->SignatureSize);
         if (HashStr == NULL) {
           Status = EFI_OUT_OF_RESOURCES;
           goto ON_RELEASE;
@@ -820,7 +904,6 @@ RfSecureBootDeleteSingleKey (
           NewDataOffset += CertList->SignatureSize;
         }
 
-        FreePool (HashCtx);
         FreePool (HashStr);
       } else {
         //
@@ -1002,9 +1085,12 @@ RedfishSecureBootEnrollKey (
   }
 
   //
-  // TODO: check to see if key is in secure boot variable or not.
-  // This takes time to parse secure boot variable.
+  // Check to see if key is in secure boot variable or not.
   //
+  if (RfSecureBootCheckDuplicatedKey (VarInfo, KeyData, KeySize, IsCertificate)) {
+    DEBUG ((DEBUG_ERROR, "%a: enrolling duplicated key detected!\n", __func__));
+    return EFI_ALREADY_STARTED;
+  }
 
   //
   // Switch to custom mode
@@ -1068,7 +1154,8 @@ RedfishSecureBootDeleteKey (
 
   DEBUG ((REDFISH_SECURE_BOOT_KEY_DEBUG, "%a: delete key: %s at: %a\n", __func__, KeyName, KeyUri));
 
-  VarInfo = RfGetSecureBootKeyInfo (KeyName);
+  SecureBootKeyInfo = NULL;
+  VarInfo           = RfGetSecureBootKeyInfo (KeyName);
   if (VarInfo == NULL) {
     return EFI_UNSUPPORTED;
   }
@@ -1137,7 +1224,9 @@ ON_RELEASE:
   //
   // Close history table without touching it.
   //
-  RfCloseHistoryTable (SecureBootKeyInfo, FALSE);
+  if (SecureBootKeyInfo != NULL) {
+    RfCloseHistoryTable (SecureBootKeyInfo, FALSE);
+  }
 
   return Status;
 }
@@ -1282,7 +1371,7 @@ RedfishSecureBootResetAllKeys (
   // Find default key
   //
   DefaultVarInfo = RfGetSecureBootDefaultKeyInfo (VarInfo);
-  if (VarInfo == NULL) {
+  if (DefaultVarInfo == NULL) {
     return EFI_UNSUPPORTED;
   }
 
