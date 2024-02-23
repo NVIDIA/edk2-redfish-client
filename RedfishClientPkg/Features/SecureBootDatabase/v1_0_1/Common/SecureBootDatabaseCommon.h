@@ -2,7 +2,7 @@
 
   Redfish feature driver implementation - internal header file
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -55,6 +55,7 @@
 #define REDFISH_TASK_FAILURE_INTERNAL_MESSAGE           "UEFI internal failure"
 #define REDFISH_TASK_FAILURE_WRONG_CERT_FORMAT_MESSAGE  "Only support PEM type of certificate"
 #define REDFISH_TASK_FAILURE_WRONG_SIG_FORMAT_MESSAGE   "Only support EFI_CERT_SHA256_GUID type of signature"
+#define REDFISH_TASK_FAILURE_DUPLICATED_KEY_MESSAGE     "Cannot enroll duplicated key"
 
 ///
 /// Definition of REDFISH_TASK_REQUEST_TYPE
