@@ -1,7 +1,7 @@
 /** @file
   Redfish secure boot keys internal header file.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -193,6 +193,24 @@ RfSecureBootKeyAddDataFromVariable (
   );
 
 /**
+  This function find target KeyData with given key hash value.
+
+  @param[in]  KeyInfo         Pointer to key info.
+  @param[in]  Hash            Hash of target key.
+  @param[in]  FindCertificate TRUE if this is search on certificate.
+                              FALSE if this is search on signature.
+
+  @retval REDFISH_SECURE_BOOT_KEY_DATA *  The pointer to target data.
+  @retval NULL                            target data cannot be found.
+**/
+REDFISH_SECURE_BOOT_KEY_DATA  *
+RfSecureBootKeyFindData (
+  IN REDFISH_SECURE_BOOT_KEY_INFO  *KeyInfo,
+  IN CHAR8                         *Hash,
+  IN BOOLEAN                       FindCertificate
+  );
+
+/**
   This function find target KeyData with given key ID.
 
   @param[in]  KeyInfo         Pointer to key info.
@@ -353,6 +371,23 @@ RfHashSecureBootKey (
   IN  UINTN  DataSize,
   OUT UINT8  **HashCtx,
   OUT UINTN  *HashCtxSize
+  );
+
+/**
+  This function returns the secure boot key hash string in input
+  signature data. It's call responsibility to release returned string
+  by calling FreePool().
+
+  @param[in]  SigData      Signature data contains key blob.
+  @param[in]  SigDataSize  The size of SigData.
+
+  @retval CHAR8 *          The ASCII string representation of secure boot key.
+  @retval NULL             Error occurs.
+**/
+CHAR8 *
+RfGetSecureBootKeyHash (
+  IN  EFI_SIGNATURE_DATA  *SigData,
+  IN  UINTN               SigDataSize
   );
 
 /**
