@@ -1,7 +1,7 @@
 /** @file
 
   (C) Copyright 2018-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -830,6 +830,10 @@ GetRedfishPropertyStr (
     return RedfishCS_status_not_found;
   }
 
+  if (!json_is_string (TempJsonObj)) {
+    return RedfishCS_status_not_found;
+  }
+
   Status = allocateDuplicateStr (Cs, (char *)json_string_value (TempJsonObj), (void **)DstBuffer);
   return Status;
 }
@@ -913,6 +917,10 @@ GetRedfishPropertyInt64 (
   Status = allocateRecordCsMemory (Cs, sizeof (RedfishCS_int64), (void **)Dst);
   if (Status != RedfishCS_status_success) {
     return Status;
+  }
+
+  if (!json_is_integer (TempJsonObj)) {
+    return RedfishCS_status_not_found;
   }
 
   **Dst = (RedfishCS_int64)json_integer_value (TempJsonObj);
