@@ -26,6 +26,6 @@
 #define RESOURCE_SCHEMA_VERSION    "v1_2_0"
 #define CONFIG_LANG_ARRAY_PATTERN  L"/Bios/.*"
 #define CONFIG_LANG_ARRAY_PREFIX   L"/Bios/"
-#define RESOURCE_SCHEMA_FULL       "x-uefi-redfish-Bios.v1_2_0"
+#define RESOURCE_SCHEMA_FULL       "x-UEFI-redfish-Bios.v1_2_0"
 
 #endif

@@ -226,7 +226,7 @@ RefreshBootOrderList (
       );
 
     //
-    // Add x-uefi configure language for boot options.
+    // Add x-UEFI configure language for boot options.
     //
     UpdateConfigLanguageToValues (mHiiHandle, Token, OptionIndex, &BootOption[Index]);
   }
@@ -250,7 +250,7 @@ RefreshBootOrderList (
     );
 
   //
-  // Add x-uefi configure language for boot order.
+  // Add x-UEFI configure language for boot order.
   //
   UpdateConfigLanguageToQuestion (mHiiHandle, STRING_TOKEN (STR_BOOT_ORDER_LIST), COMPUTER_SYSTEM_BOOT_BOOTORDER);
 

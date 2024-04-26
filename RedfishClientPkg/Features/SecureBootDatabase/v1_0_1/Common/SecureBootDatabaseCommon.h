@@ -25,7 +25,7 @@
 #define RESOURCE_SCHEMA_MINOR               "0"
 #define RESOURCE_SCHEMA_ERRATA              "1"
 #define RESOURCE_SCHEMA_VERSION             "v1_17_0"
-#define RESOURCE_SCHEMA_FULL                "x-uefi-redfish-SecureBootDatabase.v1_0_1"
+#define RESOURCE_SCHEMA_FULL                "x-UEFI-redfish-SecureBootDatabase.v1_0_1"
 #define REDFISH_SECURE_BOOT_DATABASE_DEBUG  DEBUG_VERBOSE
 #define REDFISH_SECURE_BOOT_TASK_DEBUG      DEBUG_VERBOSE
 
