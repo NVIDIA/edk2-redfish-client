@@ -88,6 +88,8 @@
   # This is used to disable Redfish HTTP query by using "$expand" parameter even when
   # Redfish service supports this query parameter.
   gEfiRedfishClientPkgTokenSpaceGuid.PcdHttpExpandQueryDisabled|FALSE|BOOLEAN|0x2000000A
+  # Support newer schema version with old schema version driver.
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishCompatibleSchemaSupport|TRUE|BOOLEAN|0x2000000B
 
 [PcdsDynamicEx]
   ## The flag used to indicate that system reboot is required due to system configuration change
