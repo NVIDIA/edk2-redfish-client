@@ -13,6 +13,12 @@
 REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate              = NULL;
 EFI_HANDLE                       mRedfishResourceConfig2ProtocolHandle = NULL;
 EDKII_REDFISH_TASK_PROTOCOL      *mRedfishTaskProtocol                 = NULL;
+REDFISH_SCHEMA_INFO              mSchemaInfo                           = {
+  { RESOURCE_SCHEMA        },
+  { RESOURCE_SCHEMA_MAJOR  },
+  { RESOURCE_SCHEMA_MINOR  },
+  { RESOURCE_SCHEMA_ERRATA }
+};
 
 /**
   This function return the "Members@odata.count" in given collection URI.
@@ -688,6 +694,7 @@ RedfishProvisioningResourceCommon (
   EFI_REDFISH_SECUREBOOTDATABASE_V1_0_1_CS  *SecureBootDatabaseCs;
   REDFISH_SECURE_BOOT_KEY                   *RedfishSecureBootKey;
   EFI_STRING                                SecureBootKeyName;
+  CHAR8                                     *PatchedJson;
 
   if (Private == NULL) {
     return EFI_INVALID_PARAMETER;
@@ -697,11 +704,20 @@ RedfishProvisioningResourceCommon (
   SecureBootKeyName    = NULL;
   SecureBootDatabase   = NULL;
   SecureBootDatabaseCs = NULL;
+  PatchedJson          = NULL;
+
+  if (PcdGetBool (PcdRedfishCompatibleSchemaSupport)) {
+    Status = RedfishSetCompatibleSchemaVersion (&mSchemaInfo, Private->Json, &PatchedJson);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "%a, cannot set compatible schema version: %r\n", __func__, Status));
+      return Status;
+    }
+  }
 
   Status = Private->JsonStructProtocol->ToStructure (
                                           Private->JsonStructProtocol,
                                           NULL,
-                                          Private->Json,
+                                          (PatchedJson == NULL ? Private->Json : PatchedJson),
                                           (EFI_REST_JSON_STRUCTURE_HEADER **)&SecureBootDatabase
                                           );
   if (EFI_ERROR (Status)) {
@@ -774,6 +790,10 @@ ON_RELEASE:
 
   if (RedfishSecureBootKey != NULL) {
     RedfishSecureBootKeyClose (RedfishSecureBootKey);
+  }
+
+  if (PatchedJson != NULL) {
+    FreePool (PatchedJson);
   }
 
   return EFI_SUCCESS;
