@@ -275,9 +275,9 @@ ProvisioningComputerSystemResource (
   }
 
   //
-  // per Redfish spec. the URL of new resource will be returned in "Location" header.
+  // Per Redfish spec. the URL of new resource will be returned in "Location" header.
   //
-  Status = GetEtagAndLocation (&Response, NULL, &NewResourceLocation);
+  Status = GetHttpResponseLocation (&Response, &NewResourceLocation);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __func__, Status));
     goto RELEASE_RESOURCE;
@@ -287,6 +287,7 @@ ProvisioningComputerSystemResource (
   // Keep location of new resource.
   //
   if (NewResourceLocation != NULL) {
+    DEBUG ((DEBUG_MANAGEABILITY, "%a: Location: %s\n", __func__, NewResourceLocation));
     RedfishSetRedfishUri (ConfigureLang, NewResourceLocation);
   }
 
@@ -300,7 +301,7 @@ RELEASE_RESOURCE:
     FreePool (Json);
   }
 
-  RedfishHttpFreeResource (&Response);
+  RedfishHttpFreeResponse (&Response);
 
   return Status;
 }
@@ -426,6 +427,8 @@ ProvisioningComputerSystemExistResource (
 
 ON_RELEASE:
 
+  RedfishHttpFreeResponse (&Response);
+
   if (Json != NULL) {
     FreePool (Json);
   }
@@ -433,8 +436,6 @@ ON_RELEASE:
   if (ConfigureLang != NULL) {
     FreePool (ConfigureLang);
   }
-
-  RedfishHttpFreeResource (&Response);
 
   return Status;
 }
@@ -504,7 +505,7 @@ RedfishCheckResourceCommon (
 
   Status = RedfishPlatformConfigGetConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, REDPATH_ARRAY_PATTERN, &ConfigureLangList, &Count);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: BiosConfigToRedfishGetConfigureLangRegex failed: %r\n", __func__, Status));
+    DEBUG ((DEBUG_ERROR, "%a: RedfishPlatformConfigGetConfigureLang failed: %r\n", __func__, Status));
     return Status;
   }
 
@@ -629,6 +630,8 @@ RedfishUpdateResourceCommon (
 
 ON_RELEASE:
 
+  RedfishHttpFreeResponse (&Response);
+
   if (Json != NULL) {
     FreePool (Json);
   }
@@ -636,8 +639,6 @@ ON_RELEASE:
   if (ConfigureLang != NULL) {
     FreePool (ConfigureLang);
   }
-
-  RedfishHttpFreeResource (&Response);
 
   return Status;
 }
@@ -663,7 +664,7 @@ RedfishIdentifyResourceCommon (
   EFI_STRING                                   EndOfChar;
   REDFISH_FEATURE_ARRAY_TYPE_CONFIG_LANG_LIST  ConfigLangList;
 
-  Supported = RedfishIdentifyResource (Private->Uri, Private->Json);
+  Supported = RedfishIdentifyResource (Private->Uri, Json);
   if (Supported) {
     Status = RedfishFeatureGetUnifiedArrayTypeConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, REDPATH_ARRAY_PATTERN, &ConfigLangList);
     if (EFI_ERROR (Status)) {
@@ -672,6 +673,7 @@ RedfishIdentifyResourceCommon (
     }
 
     if (ConfigLangList.Count == 0) {
+      DEBUG ((DEBUG_MANAGEABILITY, "%a  No platform Redfish ConfigureLang found for %s\n", __func__, Private->Uri));
       return EFI_SUCCESS;
     }
 
