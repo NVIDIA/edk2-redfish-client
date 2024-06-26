@@ -2,7 +2,7 @@
   Redfish feature driver implementation - common functions
 
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -12,7 +12,8 @@
 
 CHAR8  BiosEmptyJson[] = "{\"@odata.id\": \"\", \"@odata.type\": \"#Bios.v1_2_0.Bios\", \"Id\": \"\", \"Name\": \"\", \"Attributes\":{}}";
 
-REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate = NULL;
+REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate             = NULL;
+EFI_HANDLE                       mRedfishResourceConfigProtocolHandle = NULL;
 
 /**
   Consume resource from given URI.
@@ -273,19 +274,21 @@ ProvisioningBiosResource (
   IN  EFI_STRING                       ConfigureLang
   )
 {
-  CHAR8       *Json;
-  CHAR8       *JsonWithAddendum;
-  EFI_STATUS  Status;
-  EFI_STRING  NewResourceLocation;
-  CHAR8       *EtagStr;
-  CHAR8       ResourceId[16];
+  CHAR8             *Json;
+  CHAR8             *JsonWithAddendum;
+  EFI_STATUS        Status;
+  EFI_STRING        NewResourceLocation;
+  CHAR8             ResourceId[16];
+  REDFISH_RESPONSE  Response;
 
   if (IS_EMPTY_STRING (ConfigureLang) || (Private == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
 
-  EtagStr = NULL;
+  ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
   AsciiSPrint (ResourceId, sizeof (ResourceId), "%d", Index);
+
+  NewResourceLocation = NULL;
 
   Status = ProvisioningBiosProperties (
              Private->JsonStructProtocol,
@@ -332,18 +335,26 @@ ProvisioningBiosResource (
     JsonWithAddendum = NULL;
   }
 
-  Status = CreatePayloadToPostResource (Private->RedfishService, Private->Payload, Json, &NewResourceLocation, &EtagStr);
+  Status = RedfishHttpPostResource (Private->RedfishService, Private->Uri, Json, &Response);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: post Bios resource for %s failed: %r\n", __FUNCTION__, ConfigureLang, Status));
     goto RELEASE_RESOURCE;
   }
 
-  ASSERT (NewResourceLocation != NULL);
+  //
+  // Per Redfish spec. the URL of new resource will be returned in "Location" header.
+  //
+  Status = GetHttpResponseLocation (&Response, &NewResourceLocation);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: cannot find new location: %r\n", __FUNCTION__, Status));
+    goto RELEASE_RESOURCE;
+  }
 
   //
   // Keep location of new resource.
   //
   if (NewResourceLocation != NULL) {
+    DEBUG ((REDFISH_DEBUG_TRACE, "%a: Location: %s\n", __FUNCTION__, NewResourceLocation));
     RedfishSetRedfishUri (ConfigureLang, NewResourceLocation);
   }
 
@@ -356,6 +367,8 @@ RELEASE_RESOURCE:
   if (Json != NULL) {
     FreePool (Json);
   }
+
+  RedfishHttpFreeResponse (&Response);
 
   return Status;
 }
@@ -383,7 +396,7 @@ ProvisioningBiosResources (
   // Set the configuration language in the RESOURCE_INFORMATION_EXCHANGE.
   // This information is sent back to the parent resource (e.g. the collection driver).
   //
-  EdkIIRedfishResourceSetConfigureLang (&UnifiedConfigureLangList);
+  EdkIIRedfishResourceSetConfigureLang (mRedfishResourceConfigProtocolHandle, &UnifiedConfigureLangList);
 
   for (Index = 0; Index < UnifiedConfigureLangList.Count; Index++) {
     DEBUG ((REDFISH_DEBUG_TRACE, "[%d] create Bios resource from: %s\n", UnifiedConfigureLangList.List[Index].Index, UnifiedConfigureLangList.List[Index].ConfigureLang));
@@ -399,19 +412,19 @@ ProvisioningBiosExistResource (
   IN  REDFISH_RESOURCE_COMMON_PRIVATE  *Private
   )
 {
-  EFI_STATUS  Status;
-  EFI_STRING  ConfigureLang;
-  CHAR8       *EtagStr;
-  CHAR8       *Json;
-  CHAR8       *JsonWithAddendum;
+  EFI_STATUS        Status;
+  EFI_STRING        ConfigureLang;
+  CHAR8             *Json;
+  CHAR8             *JsonWithAddendum;
+  REDFISH_RESPONSE  Response;
 
   if (Private == NULL) {
     return EFI_INVALID_PARAMETER;
   }
 
-  EtagStr       = NULL;
   Json          = NULL;
   ConfigureLang = NULL;
+  ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
 
   ConfigureLang = RedfishGetConfigLanguage (Private->Uri);
   if (ConfigureLang == NULL) {
@@ -470,16 +483,17 @@ ProvisioningBiosExistResource (
   }
 
   DEBUG ((REDFISH_DEBUG_TRACE, "%a: provisioning existing resource for %s\n", __FUNCTION__, ConfigureLang));
-
   //
-  // PUT back to instance
+  // PATCH back to instance
   //
-  Status = CreatePayloadToPutResource (Private->RedfishService, Private->Payload, Json, &EtagStr);
+  Status = RedfishHttpPutResource (Private->RedfishService, Private->Uri, Json, &Response);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: put resource for %s failed: %r\n", __FUNCTION__, ConfigureLang, Status));
   }
 
 ON_RELEASE:
+
+  RedfishHttpFreeResponse (&Response);
 
   if (Json != NULL) {
     FreePool (Json);
@@ -545,7 +559,7 @@ RedfishCheckResourceCommon (
   }
 
   //
-  // Check ETAG to see if we need to check it
+  // Check ETAG to see if we need to check this resource again or not.
   //
   if (CheckEtag (Private->Uri, HeaderEtag, NULL)) {
     //
@@ -557,7 +571,7 @@ RedfishCheckResourceCommon (
 
   Status = RedfishPlatformConfigGetConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, CONFIG_LANG_ARRAY_PATTERN, &ConfigureLangList, &Count);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: BiosConfigToRedfishGetConfigureLangRegex failed: %r\n", __FUNCTION__, Status));
+    DEBUG ((DEBUG_ERROR, "%a: RedfishPlatformConfigGetConfigureLang failed: %r\n", __FUNCTION__, Status));
     return Status;
   }
 
@@ -608,19 +622,19 @@ RedfishUpdateResourceCommon (
   IN     CHAR8                            *InputJson
   )
 {
-  EFI_STATUS  Status;
-  CHAR8       *Json;
-  CHAR8       *JsonWithAddendum;
-  EFI_STRING  ConfigureLang;
-  CHAR8       *EtagStr;
+  EFI_STATUS        Status;
+  CHAR8             *Json;
+  CHAR8             *JsonWithAddendum;
+  EFI_STRING        ConfigureLang;
+  REDFISH_RESPONSE  Response;
 
   if ((Private == NULL) || IS_EMPTY_STRING (InputJson)) {
     return EFI_INVALID_PARAMETER;
   }
 
-  EtagStr       = NULL;
   Json          = NULL;
   ConfigureLang = NULL;
+  ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
 
   ConfigureLang = RedfishGetConfigLanguage (Private->Uri);
   if (ConfigureLang == NULL) {
@@ -682,12 +696,14 @@ RedfishUpdateResourceCommon (
   //
   // PUT back to instance
   //
-  Status = CreatePayloadToPutResource (Private->RedfishService, Private->Payload, Json, &EtagStr);
+  Status = RedfishHttpPutResource (Private->RedfishService, Private->Uri, Json, &Response);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: put resource for %s failed: %r\n", __FUNCTION__, ConfigureLang, Status));
   }
 
 ON_RELEASE:
+
+  RedfishHttpFreeResponse (&Response);
 
   if (Json != NULL) {
     FreePool (Json);
@@ -721,11 +737,11 @@ RedfishIdentifyResourceCommon (
   EFI_STRING                                   EndOfChar;
   REDFISH_FEATURE_ARRAY_TYPE_CONFIG_LANG_LIST  ConfigLangList;
 
-  Supported = RedfishIdentifyResource (Private->Uri, Private->Json);
+  Supported = RedfishIdentifyResource (Private->Uri, Json);
   if (Supported) {
     Status = RedfishFeatureGetUnifiedArrayTypeConfigureLang (RESOURCE_SCHEMA, RESOURCE_SCHEMA_VERSION, CONFIG_LANG_ARRAY_PATTERN, &ConfigLangList);
     if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: BiosConfigToRedfishGetConfigureLangRegex failed: %r\n", __FUNCTION__, Status));
+      DEBUG ((DEBUG_ERROR, "%a: RedfishFeatureGetUnifiedArrayTypeConfigureLang failed: %r\n", __FUNCTION__, Status));
       return Status;
     }
 
@@ -756,7 +772,7 @@ RedfishIdentifyResourceCommon (
     // Set the configuration language in the RESOURCE_INFORMATION_EXCHANGE.
     // This information is sent back to the parent resource (e.g. the collection driver).
     //
-    EdkIIRedfishResourceSetConfigureLang (&ConfigLangList);
+    EdkIIRedfishResourceSetConfigureLang (mRedfishResourceConfigProtocolHandle, &ConfigLangList);
     DestroyConfiglanguageList (&ConfigLangList);
     return EFI_SUCCESS;
   }
@@ -795,7 +811,7 @@ HandleResource (
   // Check and see if this is target resource that we want to handle.
   // Some resource is handled by other provider so we have to make sure this first.
   //
-  DEBUG ((REDFISH_DEBUG_TRACE, "%s Identify for %s\n", __FUNCTION__, Uri));
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a Identify for %s\n", __FUNCTION__, Uri));
   SystemRestDetected = FALSE;
   ConfigLang         = RedfishGetConfigLanguage (Uri);
   if (ConfigLang == NULL) {

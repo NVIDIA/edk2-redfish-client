@@ -2,7 +2,7 @@
   Redfish feature driver implementation - Bios
 
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -11,6 +11,7 @@
 #include "../Common/BiosCommon.h"
 
 extern REDFISH_RESOURCE_COMMON_PRIVATE  *mRedfishResourcePrivate;
+extern EFI_HANDLE                       mRedfishResourceConfigProtocolHandle;
 
 EFI_STATUS
 HandleResource (
@@ -18,10 +19,8 @@ HandleResource (
   IN  EFI_STRING                       Uri
   );
 
-EFI_HANDLE  mRedfishResourceConfigProtocolHandle;
-
 /**
-  Provision redfish resource by given URI.
+  Provisioning redfish resource by given URI.
 
   @param[in]   This                Pointer to EFI_HP_REDFISH_HII_PROTOCOL instance.
   @param[in]   Uri                 Target URI to create resource.
@@ -33,6 +32,7 @@ EFI_HANDLE  mRedfishResourceConfigProtocolHandle;
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceProvisioningResource (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   IN     EFI_STRING                              Uri,
@@ -55,7 +55,8 @@ RedfishResourceProvisioningResource (
     return EFI_NOT_READY;
   }
 
-  Status = RedfishHttpGetResource(Private->RedfishService, Uri, FALSE, &Response, TRUE);
+  ZeroMem (&Response, sizeof (Response));
+  Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __FUNCTION__, Uri));
     return Status;
@@ -78,15 +79,8 @@ RedfishResourceProvisioningResource (
   //
   // Release resource
   //
-  if (Private->Payload != NULL) {
-    RedfishFreeResponse (
-      Response.StatusCode,
-      Response.HeaderCount,
-      Response.Headers,
-      Response.Payload
-      );
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  Private->Payload = NULL;
 
   return Status;
 }
@@ -102,6 +96,7 @@ RedfishResourceProvisioningResource (
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceConsumeResource (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   IN     EFI_STRING                              Uri
@@ -125,7 +120,8 @@ RedfishResourceConsumeResource (
     return EFI_NOT_READY;
   }
 
-  Status = RedfishHttpGetResource(Private->RedfishService, Uri, FALSE, &Response, TRUE);
+  ZeroMem (&Response, sizeof (Response));
+  Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __FUNCTION__, Uri));
     return Status;
@@ -134,15 +130,17 @@ RedfishResourceConsumeResource (
   //
   // Check and see if "@Redfish.Settings" exist or not.
   //
-  ZeroMem (&PendingSettingResponse, sizeof (REDFISH_RESPONSE));
-  Status = GetPendingSettings (
-             Private->RedfishService,
-             Response.Payload,
-             &PendingSettingResponse,
-             &PendingSettingUri
-             );
+  ZeroMem (&PendingSettingResponse, sizeof (PendingSettingResponse));
+  PendingSettingUri = NULL;
+  Status            = GetPendingSettings (
+                        Private->RedfishService,
+                        Response.Payload,
+                        &PendingSettingResponse,
+                        &PendingSettingUri
+                        );
   if (!EFI_ERROR (Status)) {
     DEBUG ((REDFISH_DEBUG_TRACE, "%a: @Redfish.Settings found: %s\n", __FUNCTION__, PendingSettingUri));
+    SetRedfishSettingsObjectsUri (Uri, PendingSettingUri);
     Private->Uri     = PendingSettingUri;
     ExpectedResponse = &PendingSettingResponse;
   } else {
@@ -157,10 +155,10 @@ RedfishResourceConsumeResource (
   ASSERT (Private->Json != NULL);
 
   //
-  // Find etag in HTTP response header
+  // Searching for etag in HTTP response header
   //
   Etag   = NULL;
-  Status = GetEtagAndLocation (ExpectedResponse, &Etag, NULL);
+  Status = GetHttpResponseEtag (ExpectedResponse, &Etag);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: failed to get ETag from HTTP header\n", __FUNCTION__));
   }
@@ -173,35 +171,21 @@ RedfishResourceConsumeResource (
   //
   // Release resource
   //
-  if (Etag != NULL) {
-    FreePool (Etag);
-  }
-
-  if (Private->Payload != NULL) {
-    if (Response.Payload != NULL) {
-      RedfishFreeResponse (
-        Response.StatusCode,
-        Response.HeaderCount,
-        Response.Headers,
-        Response.Payload
-        );
-    }
-
-    if (PendingSettingResponse.Payload != NULL) {
-      RedfishFreeResponse (
-        PendingSettingResponse.StatusCode,
-        PendingSettingResponse.HeaderCount,
-        PendingSettingResponse.Headers,
-        PendingSettingResponse.Payload
-        );
-    }
-
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  RedfishHttpFreeResponse (&PendingSettingResponse);
+  Private->Payload = NULL;
 
   if (Private->Json != NULL) {
     FreePool (Private->Json);
     Private->Json = NULL;
+  }
+
+  if (Etag != NULL) {
+    FreePool (Etag);
+  }
+
+  if (PendingSettingUri != NULL) {
+    FreePool (PendingSettingUri);
   }
 
   return Status;
@@ -221,18 +205,15 @@ RedfishResourceConsumeResource (
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceGetInfo (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   OUT    REDFISH_SCHEMA_INFO                     *Info
   )
 {
-  REDFISH_RESOURCE_COMMON_PRIVATE  *Private;
-
   if ((This == NULL) || (Info == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
-
-  Private = REDFISH_RESOURCE_COMMON_PRIVATE_DATA_FROM_RESOURCE_PROTOCOL (This);
 
   AsciiStrCpyS (Info->Schema, REDFISH_SCHEMA_STRING_SIZE, RESOURCE_SCHEMA);
   AsciiStrCpyS (Info->Major, REDFISH_SCHEMA_VERSION_SIZE, RESOURCE_SCHEMA_MAJOR);
@@ -253,6 +234,7 @@ RedfishResourceGetInfo (
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceUpdate (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   IN     EFI_STRING                              Uri
@@ -272,7 +254,8 @@ RedfishResourceUpdate (
     return EFI_NOT_READY;
   }
 
-  Status = RedfishHttpGetResource(Private->RedfishService, Uri, NULL, &Response, TRUE);
+  ZeroMem (&Response, sizeof (Response));
+  Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __FUNCTION__, Uri));
     return Status;
@@ -298,15 +281,8 @@ RedfishResourceUpdate (
   //
   // Release resource
   //
-  if (Private->Payload != NULL) {
-    RedfishFreeResponse (
-      Response.StatusCode,
-      Response.HeaderCount,
-      Response.Headers,
-      Response.Payload
-      );
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  Private->Payload = NULL;
 
   if (Private->Json != NULL) {
     FreePool (Private->Json);
@@ -327,6 +303,7 @@ RedfishResourceUpdate (
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceCheck (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   IN     EFI_STRING                              Uri
@@ -347,7 +324,8 @@ RedfishResourceCheck (
     return EFI_NOT_READY;
   }
 
-  Status = RedfishHttpGetResource(Private->RedfishService, Uri, NULL, &Response, TRUE);
+  ZeroMem (&Response, sizeof (Response));
+  Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __FUNCTION__, Uri));
     return Status;
@@ -364,14 +342,14 @@ RedfishResourceCheck (
   // Find etag in HTTP response header
   //
   Etag   = NULL;
-  Status = GetEtagAndLocation (&Response, &Etag, NULL);
+  Status = GetHttpResponseEtag (&Response, &Etag);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: failed to get ETag from HTTP header\n", __FUNCTION__));
   }
 
   Status = RedfishCheckResourceCommon (Private, Private->Json, Etag);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: failed to check resource on: %s: %r\n", __FUNCTION__, Uri, Status));
+    DEBUG ((DEBUG_ERROR, "%a: failed to check resource from: %s: %r\n", __FUNCTION__, Uri, Status));
   }
 
   //
@@ -381,15 +359,8 @@ RedfishResourceCheck (
     FreePool (Etag);
   }
 
-  if (Private->Payload != NULL) {
-    RedfishFreeResponse (
-      Response.StatusCode,
-      Response.HeaderCount,
-      Response.Headers,
-      Response.Payload
-      );
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  Private->Payload = NULL;
 
   if (Private->Json != NULL) {
     FreePool (Private->Json);
@@ -411,6 +382,7 @@ RedfishResourceCheck (
 
 **/
 EFI_STATUS
+EFIAPI
 RedfishResourceIdentify (
   IN     EDKII_REDFISH_RESOURCE_CONFIG_PROTOCOL  *This,
   IN     EFI_STRING                              Uri
@@ -430,7 +402,8 @@ RedfishResourceIdentify (
     return EFI_NOT_READY;
   }
 
-  Status = RedfishHttpGetResource(Private->RedfishService, Uri, NULL, &Response, TRUE);
+  ZeroMem (&Response, sizeof (Response));
+  Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __FUNCTION__, Uri));
     return Status;
@@ -451,15 +424,8 @@ RedfishResourceIdentify (
   //
   // Release resource
   //
-  if (Private->Payload != NULL) {
-    RedfishFreeResponse (
-      Response.StatusCode,
-      Response.HeaderCount,
-      Response.Headers,
-      Response.Payload
-      );
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  Private->Payload = NULL;
 
   if (Private->Json != NULL) {
     FreePool (Private->Json);
@@ -541,11 +507,6 @@ RedfishResourceStop (
     Private->RedfishService = NULL;
   }
 
-  if (Private->Payload != NULL) {
-    RedfishCleanupPayload (Private->Payload);
-    Private->Payload = NULL;
-  }
-
   return EFI_SUCCESS;
 }
 
@@ -562,7 +523,7 @@ EDKII_REDFISH_CONFIG_HANDLER_PROTOCOL  mRedfishConfigHandler = {
 **/
 VOID
 EFIAPI
-EfiRestJasonStructureProtocolIsReady (
+EfiRestJsonStructureProtocolIsReady (
   IN  EFI_EVENT  Event,
   IN  VOID       *Context
   )
@@ -677,6 +638,7 @@ RedfishExternalResourceResourceFeatureCallback (
   REDFISH_SERVICE                  RedfishService;
   REDFISH_RESOURCE_COMMON_PRIVATE  *Private;
   EFI_STRING                       ResourceUri;
+  EFI_STRING                       BiosUri;
 
   if (FeatureAction != CallbackActionStartOperation) {
     return EFI_UNSUPPORTED;
@@ -696,7 +658,7 @@ RedfishExternalResourceResourceFeatureCallback (
   Private->InformationExchange = InformationExchange;
 
   //
-  // Find Redfish version on BMC
+  // Find Redfish version on Redfish service.
   //
   Private->RedfishVersion = RedfishGetVersion (RedfishService);
 
@@ -715,18 +677,20 @@ RedfishExternalResourceResourceFeatureCallback (
   //
   // Initialize collection path
   //
-  Private->Uri = RedfishGetUri (ResourceUri);
-  if (Private->Uri == NULL) {
+  BiosUri = RedfishGetUri (ResourceUri);
+  if (BiosUri == NULL) {
     ASSERT (FALSE);
+    FreePool (ResourceUri);
     return EFI_OUT_OF_RESOURCES;
   }
 
-  Status = HandleResource (Private, Private->Uri);
+  Status = HandleResource (Private, BiosUri);
   if (EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_ERROR, "%a: process external resource: %s failed: %r\n", __FUNCTION__, Private->Uri, Status));
+    DEBUG ((DEBUG_ERROR, "%a: process external resource: %s failed: %r\n", __FUNCTION__, BiosUri, Status));
   }
 
-  FreePool (Private->Uri);
+  FreePool (BiosUri);
+  FreePool (ResourceUri);
   return Status;
 }
 
@@ -790,6 +754,7 @@ EdkIIRedfishFeatureProtocolIsReady (
   @param[in]   SystemTable      A pointer to the EFI System Table.
 
   @retval EFI_SUCCESS           The operation completed successfully.
+  @retval EFI_ACCESS_DENIED     EFI_ISCSI_INITIATOR_NAME_PROTOCOL was installed unexpectedly.
   @retval Others                Other errors as indicated.
 **/
 EFI_STATUS
@@ -827,7 +792,7 @@ RedfishResourceEntryPoint (
   EfiCreateProtocolNotifyEvent (
     &gEfiRestJsonStructureProtocolGuid,
     TPL_CALLBACK,
-    EfiRestJasonStructureProtocolIsReady,
+    EfiRestJsonStructureProtocolIsReady,
     NULL,
     &Registration
     );
