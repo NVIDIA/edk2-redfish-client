@@ -1,7 +1,7 @@
 /** @file
   This file defines the Redfish task library interface.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -11,7 +11,7 @@
 #define REDFISH_TASK_LIB_H_
 
 #include <Uefi.h>
-#include <Library/RedfishLib.h>
+#include <RedfishServiceData.h>
 #include <Protocol/EdkIIRedfishTaskProtocol.h>
 
 /**

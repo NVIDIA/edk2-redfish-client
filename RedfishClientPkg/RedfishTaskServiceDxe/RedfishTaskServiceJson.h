@@ -1,7 +1,7 @@
 /** @file
   Definitions of RedfishTaskServiceJson
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -12,12 +12,12 @@
 
 #include <Base.h>
 #include <RedfishBase.h>
+#include <RedfishServiceData.h>
 #include <IndustryStandard/Http11.h>
 #include <Library/UefiLib.h>
 #include <Library/BaseLib.h>
 #include <Library/JsonLib.h>
 #include <Library/DebugLib.h>
-#include <Library/RedfishLib.h>
 #include <Library/RedfishHttpLib.h>
 #include <Protocol/EdkIIRedfishTaskProtocol.h>
 
