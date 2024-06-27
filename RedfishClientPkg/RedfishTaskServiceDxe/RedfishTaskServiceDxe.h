@@ -1,7 +1,7 @@
 /** @file
   Definitions of RedfishTaskServiceDxe
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -25,7 +25,7 @@
 #include <Library/RedfishMessageLib.h>
 #include <Library/RedfishEventLib.h>
 #include <Library/RedfishVersionLib.h>
-#include <Library/RedfishLib.h>
+#include <Library/RedfishHttpLib.h>
 #include <Library/RedfishTaskLib.h>
 #include <Library/RedfishProtocolFeaturesLib.h>
 #include <Library/JsonLib.h>

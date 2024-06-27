@@ -40,7 +40,7 @@ RedfishTaskGetObjectFromUri (
   TaskObj     = NULL;
   ReturnedObj = NULL;
   ZeroMem (&Response, sizeof (REDFISH_RESPONSE));
-  Status = RedfishHttpGetResource (RedfishService, Uri, &Response, TRUE);
+  Status = RedfishHttpGetResource (RedfishService, Uri, NULL, &Response, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: unable to get resource from: %s :%r\n", __func__, Uri, Status));
     goto ON_RELEASE;
@@ -65,12 +65,7 @@ RedfishTaskGetObjectFromUri (
 
 ON_RELEASE:
 
-  RedfishFreeResponse (
-    Response.StatusCode,
-    Response.HeaderCount,
-    Response.Headers,
-    Response.Payload
-    );
+  RedfishHttpFreeResponse (&Response);
 
   return ReturnedObj;
 }
