@@ -50,9 +50,10 @@ RedfishResourceProvisioningResource (
     return EFI_NOT_READY;
   }
 
+  ZeroMem (&Response, sizeof (Response));
   Private->Uri = Uri;
   if (IS_EMPTY_STRING (JsonText)) {
-    Status = RedfishHttpGetResource (Private->RedfishService, Uri, &Response, TRUE);
+    Status = RedfishHttpGetResource (Private->RedfishService, Uri, NULL, &Response, TRUE);
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __func__, Uri));
       return Status;
@@ -79,15 +80,8 @@ RedfishResourceProvisioningResource (
   //
   // Release resource
   //
-  if (Private->Payload != NULL) {
-    RedfishFreeResponse (
-      Response.StatusCode,
-      Response.HeaderCount,
-      Response.Headers,
-      Response.Payload
-      );
-    Private->Payload = NULL;
-  }
+  RedfishHttpFreeResponse (&Response);
+  Private->Payload = NULL;
 
   if (Private->Json != NULL) {
     FreePool (Private->Json);
@@ -284,11 +278,6 @@ RedfishResourceStop (
   if (Private->RedfishService != NULL) {
     RedfishCleanupService (Private->RedfishService);
     Private->RedfishService = NULL;
-  }
-
-  if (Private->Payload != NULL) {
-    RedfishCleanupPayload (Private->Payload);
-    Private->Payload = NULL;
   }
 
   return EFI_SUCCESS;

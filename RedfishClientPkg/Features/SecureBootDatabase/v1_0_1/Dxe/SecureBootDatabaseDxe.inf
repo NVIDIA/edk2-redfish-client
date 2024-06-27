@@ -32,7 +32,6 @@
   BaseMemoryLib
   DebugLib
   EdkIIRedfishResourceConfigLib
-  RedfishLib
   RedfishFeatureUtilityLib
   RedfishSecureBootKeysLib
   UefiLib

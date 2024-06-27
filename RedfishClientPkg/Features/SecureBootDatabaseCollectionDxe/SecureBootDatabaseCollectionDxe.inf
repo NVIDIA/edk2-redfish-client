@@ -34,7 +34,6 @@
   ConverterCommonLib
   MemoryAllocationLib
   RedfishFeatureUtilityLib
-  RedfishLib
   UefiLib
   UefiDriverEntryPoint
   UefiBootServicesTableLib
