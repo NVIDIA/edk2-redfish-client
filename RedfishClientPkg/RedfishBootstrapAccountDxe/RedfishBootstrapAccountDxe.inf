@@ -35,7 +35,6 @@
   MemoryAllocationLib
   PrintLib
   RedfishEventLib
-  RedfishLib
   RedfishFeatureUtilityLib
   RedfishDebugLib
   RedfishVersionLib

@@ -124,22 +124,10 @@ RedfishBootstrapAccountOnRedfishAfterProvisioning (
   // Remove bootstrap account at /redfish/v1/AccountService/Account
   //
   ZeroMem (&RedfishResponse, sizeof (REDFISH_RESPONSE));
-  Status = DeleteResourceByUri (
-             Private->RedfishService,
-             TargetUri,
-             &RedfishResponse
-             );
+  Status = RedfishHttpDeleteResource (Private->RedfishService, TargetUri, &RedfishResponse);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: can not remove bootstrap account at BMC: %r", __func__, Status));
     DumpRedfishResponse (__func__, DEBUG_ERROR, &RedfishResponse);
-    if (RedfishResponse.Payload != NULL) {
-      RedfishFreeResponse (
-        RedfishResponse.StatusCode,
-        0,
-        NULL,
-        RedfishResponse.Payload
-        );
-    }
   } else {
     DEBUG ((REDFISH_BOOTSTRAP_ACCOUNT_DEBUG, "%a: bootstrap account: %a is removed from: %s\n", __func__, AccountName, REDFISH_MANAGER_ACCOUNT_COLLECTION_URI));
   }
@@ -158,6 +146,11 @@ RedfishBootstrapAccountOnRedfishAfterProvisioning (
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot close Redfish service instance: %r\n", __func__, Status));
   }
+
+  //
+  // Release resource
+  //
+  RedfishHttpFreeResponse (&RedfishResponse);
 
   return;
 }

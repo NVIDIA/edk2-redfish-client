@@ -24,7 +24,7 @@
 #include <Library/MemoryAllocationLib.h>
 #include <Library/PrintLib.h>
 #include <Library/RedfishEventLib.h>
-#include <Library/RedfishLib.h>
+#include <Library/RedfishHttpLib.h>
 #include <Library/RedfishFeatureUtilityLib.h>
 #include <Library/RedfishDebugLib.h>
 #include <Library/RedfishVersionLib.h>
