@@ -1777,7 +1777,9 @@ GetHttpResponseEtag (
     DEBUG ((DEBUG_INFO, "%a: WARNING - No ETag support on Redfish service.\n", __func__));
     return EFI_UNSUPPORTED;
   } else {
-    if (*(Response->StatusCode) == HTTP_STATUS_200_OK) {
+    if ((*(Response->StatusCode) == HTTP_STATUS_200_OK) ||
+        (*(Response->StatusCode) == HTTP_STATUS_201_CREATED))
+    {
       Header = HttpFindHeader (Response->HeaderCount, Response->Headers, HTTP_HEADER_ETAG);
       if (Header != NULL) {
         *Etag = AllocateCopyPool (AsciiStrSize (Header->FieldValue), Header->FieldValue);
@@ -1841,7 +1843,9 @@ GetHttpResponseLocation (
   Status        = EFI_SUCCESS;
   *Location     = NULL;
   AsciiLocation = NULL;
-  if (*(Response->StatusCode) == HTTP_STATUS_200_OK) {
+  if ((*(Response->StatusCode) == HTTP_STATUS_200_OK) ||
+      (*(Response->StatusCode) == HTTP_STATUS_201_CREATED))
+  {
     Header = HttpFindHeader (Response->HeaderCount, Response->Headers, HTTP_HEADER_LOCATION);
     if (Header != NULL) {
       AsciiLocation = AllocateCopyPool (AsciiStrSize (Header->FieldValue), Header->FieldValue);
