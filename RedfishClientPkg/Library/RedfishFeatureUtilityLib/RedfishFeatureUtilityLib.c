@@ -154,7 +154,7 @@ SetEtagFromUri (
   }
 
   ZeroMem (&Response, sizeof (Response));
-  Status = RedfishHttpGetResource (RedfishService, Uri, NULL, &Response, TRUE);
+  Status = RedfishHttpGetResource (RedfishService, Uri, NULL, &Response, FALSE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: get resource from: %s failed\n", __func__, Uri));
     return Status;
