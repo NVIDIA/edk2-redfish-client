@@ -896,10 +896,14 @@ HandleResource (
   //
   DEBUG ((REDFISH_DEBUG_TRACE, "%a Check for %s\n", __func__, Uri));
   Status = EdkIIRedfishResourceConfigCheck (&SchemaInfo, Uri, NULL);
-  if (EFI_ERROR (Status)) {
+  if (SystemRestDetected || EFI_ERROR (Status)) {
     if (Status == EFI_UNSUPPORTED) {
       DEBUG ((REDFISH_DEBUG_TRACE, "%a: \"%s\" is not handled by us\n", __func__, Uri));
       return EFI_SUCCESS;
+    }
+
+    if (SystemRestDetected) {
+      DEBUG ((REDFISH_DEBUG_TRACE, "%a system has been reset to default setting. ignore pending settings because they may be stale values\n", __func__));
     }
 
     //
@@ -919,14 +923,10 @@ HandleResource (
   //
   // Consume first.
   //
-  if (SystemRestDetected) {
-    DEBUG ((REDFISH_DEBUG_TRACE, "%a system has been reset to default setting. ignore pending settings because they may be stale values\n", __func__));
-  } else {
-    DEBUG ((REDFISH_DEBUG_TRACE, "%a consume for %s\n", __func__, Uri));
-    Status = EdkIIRedfishResourceConfigConsume (&SchemaInfo, Uri, NULL);
-    if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "%a: failed to consume resource for: %s: %r\n", __func__, Uri, Status));
-    }
+  DEBUG ((REDFISH_DEBUG_TRACE, "%a consume for %s\n", __func__, Uri));
+  Status = EdkIIRedfishResourceConfigConsume (&SchemaInfo, Uri, NULL);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: failed to consume resource for: %s: %r\n", __func__, Uri, Status));
   }
 
   //
