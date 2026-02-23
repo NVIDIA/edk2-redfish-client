@@ -1,7 +1,7 @@
 /** @file
   Redfish JSON Blob library internal header file.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -20,12 +20,16 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/RedfishJsonBlobLib.h>
+#include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/RedfishDebugLib.h>
 
-#define REDFISH_JSON_BLOB_DEBUG          DEBUG_VERBOSE
-#define REDFISH_JSON_BLOB_SIGNATURE      SIGNATURE_32 ('R', 'F', 'J', 'B')
-#define REDFISH_JSON_BLOB_VARIABLE_ATTR  VARIABLE_ATTRIBUTE_NV_BS
+#include <Protocol/Decompress.h>
+
+#define REDFISH_JSON_BLOB_DEBUG           DEBUG_VERBOSE
+#define REDFISH_JSON_BLOB_COMPRESS_DEBUG  DEBUG_VERBOSE
+#define REDFISH_JSON_BLOB_SIGNATURE       SIGNATURE_32 ('R', 'F', 'J', 'B')
+#define REDFISH_JSON_BLOB_VARIABLE_ATTR   VARIABLE_ATTRIBUTE_NV_BS
 ///
 /// Definition of REDFISH_JSON_BLOB_INFO
 ///
