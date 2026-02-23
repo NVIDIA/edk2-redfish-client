@@ -1,6 +1,6 @@
 ## @file
 #
-#  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 #
@@ -21,6 +21,8 @@
 [Sources]
   RedfishJsonBlobInternal.h
   RedfishJsonBlobLib.c
+  RedfishJsonCompress.h
+  RedfishJsonCompress.c
 
 [Packages]
   MdePkg/MdePkg.dec
@@ -36,7 +38,11 @@
   JsonLib
   MemoryAllocationLib
   RedfishDebugLib
+  UefiBootServicesTableLib
   UefiRuntimeServicesTableLib
+
+[Protocols]
+  gEfiDecompressProtocolGuid  ## CONSUMED
 
 [Guids]
   gEfiRedfishClientVariableGuid

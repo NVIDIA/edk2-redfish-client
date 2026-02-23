@@ -1,13 +1,14 @@
 /** @file
   Redfish JSON Blob library to keep Redfish data in variable in JSON format.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
 **/
 
 #include "RedfishJsonBlobInternal.h"
+#include "RedfishJsonCompress.h"
 
 /**
   This function release JSON blob data instance.
@@ -92,6 +93,99 @@ ON_ERROR:
 }
 
 /**
+  This function decompress BlobData by using EFI decompress protocol.
+
+  @param[in]    BlobData           Blob data to be decompressed.
+  @param[in]    BlobDataSize       Blob data size.
+  @param[out]   DecompressedData   Pointer to keep decompressed data.
+  @param[out]   DecompressDataSize Size of decompressed data.
+
+  @retval EFI_SUCCESS           Data is decompressed successfully.
+  @retval Others                Error occurs.
+
+**/
+EFI_STATUS
+RedfishJsonBlobDecompress (
+  VOID    *BlobData,
+  UINT32  BlobDataSize,
+  VOID    **DecompressedData,
+  UINT32  *DecompressDataSize
+  )
+{
+  EFI_STATUS               Status;
+  EFI_DECOMPRESS_PROTOCOL  *Decompress;
+  UINT32                   OutSize;
+  VOID                     *OutBuffer;
+  UINT32                   ScratchSize;
+  VOID                     *ScratchBuffer;
+
+  OutSize       = 0;
+  ScratchSize   = 0;
+  OutBuffer     = NULL;
+  ScratchBuffer = NULL;
+
+  if ((BlobData == NULL) || (BlobDataSize == 0) || (DecompressedData == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *DecompressedData   = NULL;
+  *DecompressDataSize = 0;
+  Status              = gBS->LocateProtocol (
+                               &gEfiDecompressProtocolGuid,
+                               NULL,
+                               (VOID **)&Decompress
+                               );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: failed to locate decompress protocol: %r\n", __func__, Status));
+    return Status;
+  }
+
+  Status = Decompress->GetInfo (
+                         Decompress,
+                         BlobData,
+                         BlobDataSize,
+                         &OutSize,
+                         &ScratchSize
+                         );
+  if (EFI_ERROR (Status) || (OutSize == 0)) {
+    DEBUG ((DEBUG_WARN, "%a: this is not efi compressed data: %r\n", __func__, Status));
+    return Status;
+  }
+
+  OutBuffer     = AllocateZeroPool (OutSize);
+  ScratchBuffer = AllocateZeroPool (ScratchSize);
+  if ((OutBuffer == NULL) || (ScratchBuffer == NULL)) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto ON_RELEASE;
+  }
+
+  Status = Decompress->Decompress (
+                         Decompress,
+                         BlobData,
+                         BlobDataSize,
+                         OutBuffer,
+                         OutSize,
+                         ScratchBuffer,
+                         ScratchSize
+                         );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_WARN, "%a: failed to compressed data: %r\n", __func__, Status));
+    goto ON_RELEASE;
+  }
+
+  *DecompressDataSize = OutSize;
+  *DecompressedData   = OutBuffer;
+
+ON_RELEASE:
+
+  if (ScratchBuffer != NULL) {
+    FreePool (ScratchBuffer);
+  }
+
+  return Status;
+}
+
+/**
   Open JSON blob with given GUID and name. Use RedfishJsonBlobIsEmpty() to see if
   JSON blob exist in system or not. If JSON blob already exist, ToStructureFunc()
   is called in order to convert data from JSON format to private data structure.
@@ -121,6 +215,11 @@ RedfishJsonBlobOpen (
   CHAR8                   *VariableData;
   UINTN                   VariableSize;
   EDKII_JSON_VALUE        JsonValue;
+  CHAR8                   *DecompressedData;
+  UINTN                   DecompressedDataSize;
+
+  DecompressedData     = NULL;
+  DecompressedDataSize = 0;
 
   if ((BlobGuid == NULL) || IS_EMPTY_STRING (BlobName) || (ToStructureFunc == NULL) || (ToJsonFunc == NULL)) {
     DEBUG ((DEBUG_ERROR, "%a: invalid parameters\n", __func__));
@@ -153,7 +252,25 @@ RedfishJsonBlobOpen (
              &VariableSize
              );
   if (!EFI_ERROR (Status) && (VariableSize != 0)) {
-    JsonValue = JsonLoadString (VariableData, 0, NULL);
+    //
+    // Decompress data first
+    //
+    Status = RedfishJsonBlobDecompress (
+               (VOID *)VariableData,
+               (UINT32)VariableSize,
+               (VOID **)&DecompressedData,
+               (UINT32 *)&DecompressedDataSize
+               );
+    if (!EFI_ERROR (Status) && (DecompressedData != NULL)) {
+      DEBUG ((REDFISH_JSON_BLOB_COMPRESS_DEBUG, "%a: variable %s data decompressed successfully, size: 0x%x\n", __func__, JsonBlobData->VariableName, DecompressedDataSize));
+      JsonValue = JsonLoadString (DecompressedData, 0, NULL);
+    } else {
+      //
+      // Variable data might be in JSON text
+      //
+      JsonValue = JsonLoadString (VariableData, 0, NULL);
+    }
+
     if ((JsonValue == NULL) || !JsonValueIsObject (JsonValue)) {
       DEBUG ((DEBUG_ERROR, "%a: invalid JSON data: %s GUID: %g\n", __func__, JsonBlobData->VariableName, &JsonBlobData->VariableGuid));
     } else {
@@ -184,6 +301,10 @@ RedfishJsonBlobOpen (
     FreePool (VariableData);
   }
 
+  if (DecompressedData != NULL) {
+    FreePool (DecompressedData);
+  }
+
   return (REDFISH_JSON_BLOB *)JsonBlobData;
 }
 
@@ -208,16 +329,20 @@ RedfishJsonBlobWrite (
   CHAR8                   *VariableData;
   UINTN                   VariableSize;
   VOID                    *Data;
+  UINT64                  CompressedSize;
+  VOID                    *CompressedBuffer;
 
   if (Blob == NULL) {
     return EFI_INVALID_PARAMETER;
   }
 
-  JsonBlobData = NULL;
-  JsonValue    = NULL;
-  VariableData = NULL;
-  Data         = NULL;
-  VariableSize = 0;
+  JsonBlobData     = NULL;
+  JsonValue        = NULL;
+  VariableData     = NULL;
+  Data             = NULL;
+  VariableSize     = 0;
+  CompressedSize   = 0;
+  CompressedBuffer = NULL;
 
   JsonBlobData = (REDFISH_JSON_BLOB_DATA *)Blob;
   if (JsonBlobData->Signature != REDFISH_JSON_BLOB_SIGNATURE) {
@@ -289,13 +414,45 @@ RedfishJsonBlobWrite (
            );
   }
 
-  Status = gRT->SetVariable (
-                  JsonBlobData->VariableName,
-                  &JsonBlobData->VariableGuid,
-                  REDFISH_JSON_BLOB_VARIABLE_ATTR,
-                  VariableSize,
-                  (VOID *)VariableData
-                  );
+  //
+  // Compress the data
+  //
+  Status = Compress ((VOID *)VariableData, (UINT64)VariableSize, CompressedBuffer, &CompressedSize);
+  if (Status == EFI_BUFFER_TOO_SMALL) {
+    CompressedBuffer = AllocateZeroPool ((UINTN)CompressedSize);
+    if (CompressedBuffer == NULL) {
+      Status = EFI_OUT_OF_RESOURCES;
+    } else {
+      Status = Compress ((VOID *)VariableData, (UINT64)VariableSize, CompressedBuffer, &CompressedSize);
+    }
+  }
+
+  if (EFI_ERROR (Status)) {
+    //
+    // Failed to compress data. Save data in JSON text.
+    //
+    Status = gRT->SetVariable (
+                    JsonBlobData->VariableName,
+                    &JsonBlobData->VariableGuid,
+                    REDFISH_JSON_BLOB_VARIABLE_ATTR,
+                    VariableSize,
+                    (VOID *)VariableData
+                    );
+  } else {
+    //
+    // Data is compressed.
+    //
+
+    DEBUG ((REDFISH_JSON_BLOB_COMPRESS_DEBUG, "Variable %s size before compress= 0x%x after compress= 0x%x\n", JsonBlobData->VariableName, VariableSize, CompressedSize));
+    Status = gRT->SetVariable (
+                    JsonBlobData->VariableName,
+                    &JsonBlobData->VariableGuid,
+                    REDFISH_JSON_BLOB_VARIABLE_ATTR,
+                    CompressedSize,
+                    CompressedBuffer
+                    );
+  }
+
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: set variable (%s %g)failure: %r\n", __func__, JsonBlobData->VariableName, &JsonBlobData->VariableGuid, Status));
     goto ON_RELEASE;
@@ -311,6 +468,10 @@ ON_RELEASE:
 
   if (VariableData != NULL) {
     FreePool (VariableData);
+  }
+
+  if (CompressedBuffer != NULL) {
+    FreePool (CompressedBuffer);
   }
 
   return Status;
