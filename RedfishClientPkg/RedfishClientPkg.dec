@@ -2,7 +2,7 @@
 # Redfish Client Package
 #
 # (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP<BR>
-# Copyright (c) 2022-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2022-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # Copyright (C) 2024 Advanced Micro Devices, Inc. All rights reserved.<BR>
 #
 # SPDX-License-Identifier: BSD-2-Clause-Patent
@@ -92,6 +92,9 @@
   # This is used to disable Redfish HTTP query by using "$expand" parameter even when
   # Redfish service supports this query parameter.
   gEfiRedfishClientPkgTokenSpaceGuid.PcdHttpExpandQueryDisabled|FALSE|BOOLEAN|0x2000000A
+  # Due to the boot time concern, the maximum secure boot keys that are allowed to send to BMC
+  # during boot is limited by this PCD. Set it to 0 to disable this limitation.
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishMaximumSecureBootKeysAllowed|100|UINT16|0x2000000B
 
 [PcdsDynamicEx]
   ## The flag used to indicate that system reboot is required due to system configuration change

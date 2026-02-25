@@ -2,7 +2,7 @@
   Redfish feature driver implementation - common functions
 
   (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP<BR>
-  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -515,6 +515,9 @@ ProvisioningKeys (
   REDFISH_SECURE_BOOT_KEY_LIST  *SecureBootKeyList;
   EFI_STRING                    NewLocation;
   UINTN                         MemberCount;
+  UINTN                         MaximumSecureBootKeysAllowed;
+
+  MaximumSecureBootKeysAllowed = PcdGet16 (PcdRedfishMaximumSecureBootKeysAllowed);
 
   if ((Private == NULL) || (SecureBootDatabaseCs == NULL) || (RedfishSecureBootKey == NULL)) {
     return EFI_INVALID_PARAMETER;
@@ -626,6 +629,11 @@ ProvisioningKeys (
   if (SecureBootKeyList->AdditionCount > 0) {
     DEBUG ((REDFISH_SECURE_BOOT_DATABASE_DEBUG, "%a: upload addition %d key to BMC\n", __func__, SecureBootKeyList->AdditionCount));
     for (Index = 0; Index < SecureBootKeyList->AdditionCount; Index++) {
+      if ((MaximumSecureBootKeysAllowed > 0) && (Index >= MaximumSecureBootKeysAllowed)) {
+        DEBUG ((DEBUG_WARN, "%a: reach maximum provisioned key limit: (%d/%d). Remaining keys will be provisioned in next boot\n", __func__, Index, MaximumSecureBootKeysAllowed));
+        break;
+      }
+
       Status = RedfishPostSecureBootKey (Private->RedfishService, KeyCollectionUri, &SecureBootKeyList->AdditionList[Index], IsCertificate, &NewLocation);
       if (EFI_ERROR (Status)) {
         DEBUG ((DEBUG_ERROR, "%a: can not post Redfish secure boot key: %r\n", __func__, Status));
