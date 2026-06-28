@@ -96,6 +96,12 @@
   # during boot is limited by this PCD. Set it to 0 to disable this limitation.
   gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishMaximumSecureBootKeysAllowed|100|UINT16|0x2000000B
 
+[PcdsDynamic]
+  ## When TRUE, RedfishFeatureCoreDxe entry point returns EFI_SUCCESS immediately
+  ## and the Redfish feature stack does not run. Set by platform policy before the
+  ## feature core is dispatched.
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishFeatureCoreDisabled|FALSE|BOOLEAN|0x20000003
+
 [PcdsDynamicEx]
   ## The flag used to indicate that system reboot is required due to system configuration change
   gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishSystemRebootRequired|FALSE|BOOLEAN|0x20000001

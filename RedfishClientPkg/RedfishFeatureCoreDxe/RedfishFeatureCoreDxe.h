@@ -24,6 +24,7 @@
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/RedfishEventLib.h>
 #include <Library/RedfishFeatureUtilityLib.h>
+#include <Library/PcdLib.h>
 #include <Library/ReportStatusCodeLib.h>
 
 #define MaxNodeNameLength             64

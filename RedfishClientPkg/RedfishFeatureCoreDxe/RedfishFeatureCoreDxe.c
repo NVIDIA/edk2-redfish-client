@@ -748,6 +748,11 @@ RedfishFeatureCoreEntryPoint (
   EFI_HANDLE  Handle;
   EFI_GUID    *EventGuid;
 
+  if (PcdGetBool (PcdRedfishFeatureCoreDisabled)) {
+    DEBUG ((DEBUG_INFO, "%a: Redfish feature core disabled by platform policy\n", __func__));
+    return EFI_SUCCESS;
+  }
+
   Handle              = NULL;
   ResourceUriNodeList = NULL;
   mTaskServiceNode    = NULL;
