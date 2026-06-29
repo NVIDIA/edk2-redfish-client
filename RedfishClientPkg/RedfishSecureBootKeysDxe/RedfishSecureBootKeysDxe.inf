@@ -1,6 +1,6 @@
 ## @file
 #
-#  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+#  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 #
@@ -32,6 +32,7 @@
   MdeModulePkg/MdeModulePkg.dec
   SecurityPkg/SecurityPkg.dec
   RedfishPkg/RedfishPkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
   RedfishClientPkg/RedfishClientPkg.dec
 
 [LibraryClasses]
@@ -48,6 +49,7 @@
   UefiBootServicesTableLib
   UefiDriverEntryPoint
   UefiRuntimeServicesTableLib
+  TimeBaseLib
 
 [Guids]
   gEfiGlobalVariableGuid
@@ -73,6 +75,9 @@
   gEfiHash2ProtocolGuid                   ## CONSUMED
   gEfiHash2ServiceBindingProtocolGuid     ## CONSUMED
   gEdkIIRedfishSecureBootKeysProtocolGuid ## PRODUCED
+
+[Pcd]
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishSkipInvalidCertificate
 
 [Depex]
   TRUE

@@ -1,7 +1,7 @@
 /** @file
   Redfish secure boot keys driver to track secure boot keys between system boots.
 
-  Copyright (c) 2023-2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -209,6 +209,64 @@ RfSecureBootGetTime (
   Time->TimeZone   = 0;
   Time->Daylight   = 0;
   Time->Pad2       = 0;
+
+  return EFI_SUCCESS;
+}
+
+/**
+  Retrieves the current time in UTC and returns it as an EFI_TIME structure.
+
+  This function obtains the current platform time using UEFI runtime services,
+  converts it to UTC if necessary, and outputs the time as an EFI_TIME.
+  The resulting EFI_TIME structure has TimeZone set to EFI_UNSPECIFIED_TIMEZONE
+  and Daylight to EFI_TIME_IN_STANDARD_TIME.
+
+  @param[out]  Time  Pointer to an EFI_TIME structure to receive the current UTC time.
+
+  @retval EFI_SUCCESS           The current time was returned successfully.
+  @retval EFI_INVALID_PARAMETER Time is NULL.
+  @retval Others                An error occurred retrieving the time.
+**/
+EFI_STATUS
+RfSecureBootGetUtcTime (
+  OUT EFI_TIME  *Time
+  )
+{
+  EFI_STATUS  Status;
+  EFI_TIME    CurrentTime;
+  UINTN       UtcEpoch;
+
+  if (Time == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  ZeroMem (Time, sizeof (EFI_TIME));
+  Status = gRT->GetTime (&CurrentTime, NULL);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  //
+  // If the time is already in UTC, return it directly.
+  //
+  if ((CurrentTime.TimeZone == 0) && (CurrentTime.Daylight == 0)) {
+    CopyMem (Time, &CurrentTime, sizeof (EFI_TIME));
+    return EFI_SUCCESS;
+  }
+
+  //
+  // Convert the time to UTC.
+  //
+  UtcEpoch = EfiTimeToEpoch (&CurrentTime);
+  if ((CurrentTime.TimeZone != EFI_UNSPECIFIED_TIMEZONE) && (CurrentTime.TimeZone != 0)) {
+    UtcEpoch -= CurrentTime.TimeZone * SEC_PER_MIN;
+  } else if ((CurrentTime.Daylight & EFI_TIME_IN_DAYLIGHT) == EFI_TIME_IN_DAYLIGHT) {
+    UtcEpoch -= SEC_PER_HOUR;
+  }
+
+  EpochToEfiTime (UtcEpoch, Time);
+  Time->TimeZone = 0;
+  Time->Daylight = 0;
 
   return EFI_SUCCESS;
 }
@@ -454,6 +512,424 @@ RfSecureBootEnrollKeyFromData (
 }
 
 /**
+  Parse a single ASN.1 DER TLV element.
+
+  @param[in]  Ptr    Pointer to the start of the TLV.
+  @param[in]  End    One-past-end of the enclosing buffer.
+  @param[out] Tag    Tag byte of this element.
+  @param[out] Value  Pointer to the value (content) bytes (may be NULL).
+  @param[out] Len    Number of content bytes (may be NULL).
+  @param[out] Next   Pointer to the next TLV after this element (may be NULL).
+
+  @retval EFI_SUCCESS           Element parsed successfully.
+  @retval EFI_INVALID_PARAMETER Unexpected tag, indefinite length, or NULL input.
+  @retval EFI_BUFFER_TOO_SMALL  Declared length extends past End.
+**/
+STATIC
+EFI_STATUS
+DerGetElement (
+  IN  CONST UINT8  *Ptr,
+  IN  CONST UINT8  *End,
+  OUT UINT8        *Tag,
+  OUT CONST UINT8  **Value,
+  OUT UINTN        *Len,
+  OUT CONST UINT8  **Next
+  )
+{
+  UINTN        LenVal;
+  UINTN        LenByte;
+  UINTN        Index;
+  CONST UINT8  *P;
+
+  if ((Ptr == NULL) || (End == NULL) || (Tag == NULL) || (Ptr >= End)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  P    = Ptr;
+  *Tag = *P++;
+
+  if (P >= End) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  if (*P < 0x80) {
+    LenVal = *P++;
+  } else {
+    LenByte = *P & 0x7F;
+    P++;
+    if ((LenByte == 0) || (LenByte > sizeof (UINTN)) || ((P + LenByte) > End)) {
+      return EFI_INVALID_PARAMETER;
+    }
+
+    LenVal = 0;
+    for (Index = 0; Index < LenByte; Index++) {
+      LenVal = (LenVal << 8) | *P++;
+    }
+  }
+
+  if ((P + LenVal) > End) {
+    return EFI_BUFFER_TOO_SMALL;
+  }
+
+  if (Value != NULL) {
+    *Value = P;
+  }
+
+  if (Len != NULL) {
+    *Len = LenVal;
+  }
+
+  if (Next != NULL) {
+    *Next = P + LenVal;
+  }
+
+  return EFI_SUCCESS;
+}
+
+/**
+  Parse an ASN.1 UTCTime (tag 0x17) or GeneralizedTime (tag 0x18) into an EFI_TIME.
+
+  UTCTime format:         YYMMDDHHMMSSZ   (>=13 bytes)
+  GeneralizedTime format: YYYYMMDDHHMMSSZ (>=15 bytes)
+  For UTCTime, years 50-99 map to 1950-1999 and 00-49 map to 2000-2049.
+
+  @param[in]  Tag   ASN.1 tag byte, must be 0x17 or 0x18.
+  @param[in]  Data  Pointer to the time string bytes.
+  @param[in]  Len   Length of the time string.
+  @param[out] Time  Receives the parsed time.
+
+  @retval EFI_SUCCESS           Time parsed successfully.
+  @retval EFI_INVALID_PARAMETER Unsupported tag, string too short, or NULL input.
+**/
+STATIC
+EFI_STATUS
+DerParseTime (
+  IN  UINT8        Tag,
+  IN  CONST UINT8  *Data,
+  IN  UINTN        Len,
+  OUT EFI_TIME     *Time
+  )
+{
+  UINT16  Year;
+  UINTN   Offset;
+
+  if ((Data == NULL) || (Time == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  ZeroMem (Time, sizeof (EFI_TIME));
+  Offset = 0;
+
+  if (Tag == 0x17) {
+    if (Len < 13) {
+      return EFI_INVALID_PARAMETER;
+    }
+
+    Year   = (UINT16)(((Data[0] - '0') * 10) + (Data[1] - '0'));
+    Year   = (Year >= 50) ? (1900 + Year) : (2000 + Year);
+    Offset = 2;
+  } else if (Tag == 0x18) {
+    if (Len < 15) {
+      return EFI_INVALID_PARAMETER;
+    }
+
+    Year = (UINT16)(((Data[0] - '0') * 1000) + ((Data[1] - '0') * 100) +
+                    ((Data[2] - '0') * 10)   +  (Data[3] - '0'));
+    Offset = 4;
+  } else {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Time->Year   = Year;
+  Time->Month  = (UINT8)(((Data[Offset]     - '0') * 10) + (Data[Offset + 1] - '0'));
+  Time->Day    = (UINT8)(((Data[Offset + 2] - '0') * 10) + (Data[Offset + 3] - '0'));
+  Time->Hour   = (UINT8)(((Data[Offset + 4] - '0') * 10) + (Data[Offset + 5] - '0'));
+  Time->Minute = (UINT8)(((Data[Offset + 6] - '0') * 10) + (Data[Offset + 7] - '0'));
+  Time->Second = (UINT8)(((Data[Offset + 8] - '0') * 10) + (Data[Offset + 9] - '0'));
+
+  return EFI_SUCCESS;
+}
+
+/**
+  Parse the NotBefore and NotAfter validity dates from a DER-encoded X.509 certificate.
+
+  Walks the ASN.1 DER structure:
+    Certificate SEQUENCE
+      TBSCertificate SEQUENCE
+        [0] version    (optional)
+        serialNumber   INTEGER
+        signature      AlgorithmIdentifier SEQUENCE
+        issuer         Name SEQUENCE
+        validity       SEQUENCE
+          notBefore    Time
+          notAfter     Time
+
+  @param[in]  DerData      Pointer to DER-encoded X.509 certificate bytes.
+  @param[in]  DerDataSize  Size of DerData in bytes.
+  @param[out] NotBefore    Receives the certificate's notBefore time.
+  @param[out] NotAfter     Receives the certificate's notAfter time.
+
+  @retval EFI_SUCCESS           Validity dates parsed successfully.
+  @retval EFI_INVALID_PARAMETER NULL input or malformed certificate structure.
+  @retval EFI_BUFFER_TOO_SMALL  Certificate data is truncated.
+**/
+EFI_STATUS
+ParseX509Validity (
+  IN  UINT8     *DerData,
+  IN  UINTN     DerDataSize,
+  OUT EFI_TIME  *NotBefore,
+  OUT EFI_TIME  *NotAfter
+  )
+{
+  EFI_STATUS   Status;
+  CONST UINT8  *Ptr;
+  CONST UINT8  *End;
+  CONST UINT8  *TbsStart;
+  CONST UINT8  *TbsEnd;
+  CONST UINT8  *ValStart;
+  CONST UINT8  *ValEnd;
+  CONST UINT8  *Value;
+  CONST UINT8  *Next;
+  UINTN        Len;
+  UINT8        Tag;
+
+  if ((DerData == NULL) || (DerDataSize == 0) || (NotBefore == NULL) || (NotAfter == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Ptr = DerData;
+  End = DerData + DerDataSize;
+
+  //
+  // Enter outer Certificate SEQUENCE (tag 0x30)
+  //
+  Status = DerGetElement (Ptr, End, &Tag, &TbsStart, &Len, NULL);
+  if (EFI_ERROR (Status) || (Tag != 0x30)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  TbsEnd = TbsStart + Len;
+
+  //
+  // Enter TBSCertificate SEQUENCE (first field inside Certificate, tag 0x30)
+  //
+  Status = DerGetElement (TbsStart, TbsEnd, &Tag, &Value, &Len, NULL);
+  if (EFI_ERROR (Status) || (Tag != 0x30)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  TbsStart = Value;
+  TbsEnd   = Value + Len;
+  Ptr      = TbsStart;
+
+  //
+  // Skip optional [0] EXPLICIT version field (context tag 0xA0)
+  //
+  Status = DerGetElement (Ptr, TbsEnd, &Tag, &Value, &Len, &Next);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  if (Tag == 0xA0) {
+    Ptr    = Next;
+    Status = DerGetElement (Ptr, TbsEnd, &Tag, &Value, &Len, &Next);
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+  }
+
+  //
+  // Skip serialNumber INTEGER (tag 0x02)
+  //
+  if (Tag != 0x02) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Ptr = Next;
+
+  //
+  // Skip signature AlgorithmIdentifier SEQUENCE (tag 0x30)
+  //
+  Status = DerGetElement (Ptr, TbsEnd, &Tag, &Value, &Len, &Next);
+  if (EFI_ERROR (Status) || (Tag != 0x30)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Ptr = Next;
+
+  //
+  // Skip issuer Name SEQUENCE (tag 0x30)
+  //
+  Status = DerGetElement (Ptr, TbsEnd, &Tag, &Value, &Len, &Next);
+  if (EFI_ERROR (Status) || (Tag != 0x30)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Ptr = Next;
+
+  //
+  // Enter Validity SEQUENCE (tag 0x30)
+  //
+  Status = DerGetElement (Ptr, TbsEnd, &Tag, &ValStart, &Len, NULL);
+  if (EFI_ERROR (Status) || (Tag != 0x30)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  ValEnd = ValStart + Len;
+  Ptr    = ValStart;
+
+  //
+  // Parse notBefore Time (UTCTime 0x17 or GeneralizedTime 0x18)
+  //
+  Status = DerGetElement (Ptr, ValEnd, &Tag, &Value, &Len, &Next);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Status = DerParseTime (Tag, Value, Len, NotBefore);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  Ptr = Next;
+
+  //
+  // Parse notAfter Time (UTCTime 0x17 or GeneralizedTime 0x18)
+  //
+  Status = DerGetElement (Ptr, ValEnd, &Tag, &Value, &Len, &Next);
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  return DerParseTime (Tag, Value, Len, NotAfter);
+}
+
+/**
+  Compare two EFI_TIME values lexicographically by field.
+
+  @param[in]  Time1   First time value.
+  @param[in]  Time2   Second time value.
+
+  @retval  < 0   Time1 is earlier than Time2.
+  @retval    0   Time1 equals Time2.
+  @retval  > 0   Time1 is later than Time2.
+**/
+INTN
+CompareTime (
+  IN CONST EFI_TIME  *Time1,
+  IN CONST EFI_TIME  *Time2
+  )
+{
+  if (Time1->Year != Time2->Year) {
+    return (INTN)Time1->Year - (INTN)Time2->Year;
+  }
+
+  if (Time1->Month != Time2->Month) {
+    return (INTN)Time1->Month - (INTN)Time2->Month;
+  }
+
+  if (Time1->Day != Time2->Day) {
+    return (INTN)Time1->Day - (INTN)Time2->Day;
+  }
+
+  if (Time1->Hour != Time2->Hour) {
+    return (INTN)Time1->Hour - (INTN)Time2->Hour;
+  }
+
+  if (Time1->Minute != Time2->Minute) {
+    return (INTN)Time1->Minute - (INTN)Time2->Minute;
+  }
+
+  return (INTN)Time1->Second - (INTN)Time2->Second;
+}
+
+/**
+  This function checks whether the provided certificate sequence is currently valid (not expired).
+  It returns TRUE if the certificate sequence is valid, and FALSE if it is expired or input is invalid.
+
+  @param[in]   Type         Pointer to the GUID indicating the certificate type.
+  @param[in]   SigData      Pointer to the signature data of the certificate.
+  @param[in]   SigDataSize  Size of the signature data in bytes.
+
+  @retval      TRUE         The certificate sequence is valid.
+  @retval      FALSE        The certificate sequence is valid or input is invalid.
+**/
+BOOLEAN
+IsCertificateSequenceValid (
+  IN EFI_GUID            *Type,
+  IN EFI_SIGNATURE_DATA  *SigData,
+  IN UINTN               SigDataSize
+  )
+{
+  EFI_STATUS  Status;
+  EFI_TIME    NotBefore;
+  EFI_TIME    NotAfter;
+  EFI_TIME    CurrentTime;
+  UINT8       *KeyData;
+  UINTN       KeyDataSize;
+
+  if ((Type == NULL) || (SigData == NULL) || (SigDataSize == 0)) {
+    return FALSE;
+  }
+
+  //
+  // Input data is not X.509 certificate, return TRUE.
+  //
+  if (!CompareGuid (Type, &gEfiCertX509Guid)) {
+    return TRUE;
+  }
+
+  KeyData     = (UINT8 *)SigData->SignatureData;
+  KeyDataSize = SigDataSize - sizeof (EFI_SIGNATURE_DATA) + 1;
+
+  Status = ParseX509Validity (KeyData, KeyDataSize, &NotBefore, &NotAfter);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Unable to parse certificate validity: %r\n", __func__, Status));
+    return TRUE;
+  }
+
+  Status = RfSecureBootGetUtcTime (&CurrentTime);
+  if (EFI_ERROR (Status)) {
+    DEBUG ((DEBUG_ERROR, "%a: Unable to get current time: %r\n", __func__, Status));
+    return TRUE;
+  }
+
+  // Compare current time with NotBefore and NotAfter
+  if ((CompareTime (&CurrentTime, &NotBefore) < 0) || (CompareTime (&CurrentTime, &NotAfter) > 0)) {
+    //
+    // Split across two DEBUG calls: the DebugLib argument buffer holds at most
+    // 12 UINTN slots (96 bytes on 64-bit); every argument consumes one slot
+    // regardless of its declared type.  Fitting all 13 args in one call would
+    // overflow the buffer and trigger an ASSERT in PeiDxeDebugLibReportStatusCode.
+    //
+    DEBUG ((
+      DEBUG_WARN,
+      "%a: Certificate %04d-%02d-%02d %02d:%02d:%02d",
+      __func__,
+      NotBefore.Year,
+      NotBefore.Month,
+      NotBefore.Day,
+      NotBefore.Hour,
+      NotBefore.Minute,
+      NotBefore.Second
+      ));
+    DEBUG ((
+      DEBUG_WARN,
+      " - %04d-%02d-%02d %02d:%02d:%02d is expired or not valid yet\n",
+      NotAfter.Year,
+      NotAfter.Month,
+      NotAfter.Day,
+      NotAfter.Hour,
+      NotAfter.Minute,
+      NotAfter.Second
+      ));
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+/**
 
   This function read secure boot key from given variable name
   and GUID. And add key information to key list.
@@ -479,6 +955,7 @@ RfSecureBootLoadVariable (
   UINTN                          SigListCount;
   UINTN                          Index;
   SECURE_BOOT_KEY_VARIABLE_INFO  *KeyVarInfo;
+  BOOLEAN                        IsValid;
 
   if (KeyInfo == NULL) {
     return EFI_INVALID_PARAMETER;
@@ -527,6 +1004,19 @@ RfSecureBootLoadVariable (
       DEBUG_CODE (
         DEBUG ((REDFISH_SECURE_BOOT_VARIABLE_DEBUG, "%a: %d) SignatureOwner: %g\n", __func__, Index, &Cert->SignatureOwner));
         );
+
+      //
+      // If the PcdRedfishSkipInvalidCertificate is TRUE, skip invalid certificate.
+      //
+      if (PcdGetBool (PcdRedfishSkipInvalidCertificate)) {
+        // Check the X.509 certificate validity period before adding the key.
+        // This ensures we only consider certificates that are currently valid (not expired and not before the valid start date).
+        IsValid = IsCertificateSequenceValid (&CertList->SignatureType, Cert, CertList->SignatureSize);
+        if (!IsValid) {
+          DEBUG ((DEBUG_WARN, "%a: Certificate expired or not valid yet (index: %d), skipping.\n", __func__, Index));
+          continue;
+        }
+      }
 
       Status = RfSecureBootKeyAddDataFromVariable (KeyInfo, KeyVarInfo->Uri, &CertList->SignatureType, Cert, CertList->SignatureSize);
       if (EFI_ERROR (Status)) {

@@ -1,7 +1,7 @@
 /** @file
   Redfish secure boot keys internal header file.
 
-  Copyright (c) 2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  Copyright (c) 2023-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 
@@ -16,6 +16,7 @@
 #include <Library/SecureBootVariableLib.h>
 #include <Library/PlatformPKProtectionLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Library/TimeBaseLib.h>
 
 #include "RedfishSecureBootData.h"
 
@@ -24,6 +25,10 @@
 #define REDFISH_SECURE_BOOT_GUID_STR_SIZE  64
 #define REDFISH_SECURE_BOOT_CUSTOM_MODE()    RfSecureBootSetCustomMode(TRUE)
 #define REDFISH_SECURE_BOOT_STANDARD_MODE()  RfSecureBootSetCustomMode(FALSE)
+//
+// Seconds per unit.
+//
+#define SEC_PER_MIN  ((UINTN)    60)
 
 /**
 
@@ -126,6 +131,42 @@ RedfishSecureBootEnrollKey (
   IN EFI_STRING                               KeyName,
   IN CHAR8                                    *KeyType,
   IN CHAR8                                    *KeyString
+  );
+
+/**
+  Parse the NotBefore and NotAfter validity dates from a DER-encoded X.509 certificate.
+
+  @param[in]  DerData      Pointer to DER-encoded X.509 certificate bytes.
+  @param[in]  DerDataSize  Size of DerData in bytes.
+  @param[out] NotBefore    Receives the certificate's notBefore time.
+  @param[out] NotAfter     Receives the certificate's notAfter time.
+
+  @retval EFI_SUCCESS           Validity dates parsed successfully.
+  @retval EFI_INVALID_PARAMETER NULL input or malformed certificate structure.
+  @retval EFI_BUFFER_TOO_SMALL  Certificate data is truncated.
+**/
+EFI_STATUS
+ParseX509Validity (
+  IN  UINT8     *DerData,
+  IN  UINTN     DerDataSize,
+  OUT EFI_TIME  *NotBefore,
+  OUT EFI_TIME  *NotAfter
+  );
+
+/**
+  Compare two EFI_TIME values.
+
+  @param[in]  Time1   First time value.
+  @param[in]  Time2   Second time value.
+
+  @retval  < 0   Time1 is earlier than Time2.
+  @retval    0   Time1 equals Time2.
+  @retval  > 0   Time1 is later than Time2.
+**/
+INTN
+CompareTime (
+  IN CONST EFI_TIME  *Time1,
+  IN CONST EFI_TIME  *Time2
   );
 
 /**

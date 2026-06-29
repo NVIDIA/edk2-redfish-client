@@ -95,6 +95,9 @@
   # Due to the boot time concern, the maximum secure boot keys that are allowed to send to BMC
   # during boot is limited by this PCD. Set it to 0 to disable this limitation.
   gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishMaximumSecureBootKeysAllowed|100|UINT16|0x2000000B
+  # Check secure boot key certificate validity period(the "Not Before" and "Not After" dates)
+  # Skip invalid certificate to prevent false alarm because BMC may reject invalid certificate
+  gEfiRedfishClientPkgTokenSpaceGuid.PcdRedfishSkipInvalidCertificate|TRUE|BOOLEAN|0x2000000C
 
 [PcdsDynamic]
   ## When TRUE, RedfishFeatureCoreDxe entry point returns EFI_SUCCESS immediately
