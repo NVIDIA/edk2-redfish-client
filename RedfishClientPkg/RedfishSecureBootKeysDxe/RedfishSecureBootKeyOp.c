@@ -1871,6 +1871,20 @@ RedfishSecureBootResetAllKeys (
   DataSize = 0;
   Data     = NULL;
   Status   = GetVariable2 (DefaultVarInfo->VariableName, DefaultVarInfo->VariableGuid, &Data, &DataSize);
+  if ((Status == EFI_NOT_FOUND) &&
+      ((VarInfo->Type == RedfishSecureBootKeyDbt) || (VarInfo->Type == RedfishSecureBootKeyDbx)))
+  {
+    //
+    // dbt and dbx are optional Secure Boot databases. If no factory default exists,
+    // the empty state after deletion is the correct default — treat as success.
+    //
+    if (Data != NULL) {
+      FreePool (Data);
+    }
+
+    return EFI_SUCCESS;
+  }
+
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_ERROR, "%a: cannot read default key: %s: %r\n", __func__, DefaultVarInfo->VariableName, Status));
     return Status;
